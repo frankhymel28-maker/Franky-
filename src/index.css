@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --color-industrial-bg: #E4E3E0;
+  --color-industrial-ink: #141414;
+  --color-industrial-line: #141414;
+  --color-industrial-accent: #f59e0b; /* Safety Orange/Amber */
+  
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-industrial-bg text-industrial-ink font-sans antialiased;
+  }
+}
+
+@layer components {
+  .data-grid-border {
+    @apply border-industrial-line/20;
+  }
+  
+  .tech-label {
+    @apply font-mono text-[10px] uppercase tracking-wider opacity-50;
+  }
+  
+  .tech-value {
+    @apply font-mono uppercase tracking-tight;
+  }
+}

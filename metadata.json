@@ -1,0 +1,8 @@
+{
+  "name": "7.13026 Remix: THE Fraky 5.29 - db sqlt",
+  "description": "Real-time material tracking and logistics for industrial construction. Manage inventory, receipts, and site-wide distribution with precision.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": []
+}
