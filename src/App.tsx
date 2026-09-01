@@ -723,18 +723,25 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [materials, unallocatedPool, spools, manifests, logs, triggerSync]);
 
+  // Keep a ref to the latest triggerSync so the interval/listener below never
+  // call a stale closure holding onto old (e.g. pre-clear) state.
+  const triggerSyncRef = useRef(triggerSync);
+  React.useEffect(() => {
+    triggerSyncRef.current = triggerSync;
+  }, [triggerSync]);
+
   // Run initial sync on mount and set up periodic auto-sync every 8 seconds
   React.useEffect(() => {
     // Initial sync
-    triggerSync();
+    triggerSyncRef.current();
 
     const interval = setInterval(() => {
-      triggerSync();
+      triggerSyncRef.current();
     }, 8000);
 
     // Watch for online connection status to automatically trigger sync
     const handleOnline = () => {
-      triggerSync();
+      triggerSyncRef.current();
     };
     window.addEventListener('online', handleOnline);
 
