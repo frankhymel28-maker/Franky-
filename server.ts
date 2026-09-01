@@ -13,7 +13,7 @@ async function startServer() {
   initDb();
 
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
 
   app.use(express.json({ limit: "50mb" })); // Support large payload for syncing scanned documents / signature data URLs
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
