@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { Job, Material, Spool, Manifest, UnallocatedItem } from '../types';
 import { MTRViewer } from './MTRViewer';
+import { AddGlobalInventoryModal, GlobalHeatLine } from './AddGlobalInventoryModal';
 
 interface JobsDashboardProps {
   jobs: Job[];
@@ -16,6 +17,7 @@ interface JobsDashboardProps {
   onCreateJob: (input: { jobNumber: string; projectName: string; clientName: string; siteAddress: string; status: Job['status'] }) => void;
   onDeleteJob: (jobId: string) => void;
   onClearOrphanedData: () => void;
+  onAddGlobalInventory: (input: { name: string; sku: string; category: string; unit: string; heatLines: GlobalHeatLine[] }) => void;
 }
 
 const STATUS_STYLES: Record<Job['status'], string> = {
@@ -35,10 +37,12 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
   onCreateJob,
   onDeleteJob,
   onClearOrphanedData,
+  onAddGlobalInventory,
 }) => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [isClearOrphanedConfirmOpen, setIsClearOrphanedConfirmOpen] = useState(false);
+  const [isAddInventoryOpen, setIsAddInventoryOpen] = useState(false);
   const [jobNumber, setJobNumber] = useState('');
   const [projectName, setProjectName] = useState('');
   const [clientName, setClientName] = useState('');
@@ -50,14 +54,16 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
   const jobNumberById = useMemo(() => new Map(jobs.map(j => [j.id, j.jobNumber])), [jobs]);
   const totalOrphaned = orphanedCounts.materials + orphanedCounts.unallocatedPool + orphanedCounts.spools + orphanedCounts.manifests + orphanedCounts.logs;
 
-  // Same material aggregated across multiple jobs' unallocated pools is
-  // merged into one row (grouped by name), with a per-job quantity
+  // Same material aggregated across multiple jobs' (and global) unallocated
+  // pools is merged into one row (grouped by name), with a per-job quantity
   // breakdown, so the same part number bought for two jobs shows as one
-  // line rather than duplicates. Items with no job (or a deleted job) are
-  // orphaned data, not real per-job inventory, so they're excluded here -
-  // see the "Clear Orphaned Data" action instead. Each row also carries its
-  // heat records (from every underlying UnallocatedItem's instances) so the
-  // row can expand to show per-heat detail and MTR documents.
+  // line rather than duplicates. Items with a jobId pointing to a deleted
+  // job are orphaned data, not real inventory, so they're excluded here -
+  // see the "Clear Orphaned Data" action instead. Items with NO jobId are
+  // intentionally-global stock (never tied to a job) and are included,
+  // tagged "Global". Each row also carries its heat records (from every
+  // underlying UnallocatedItem's instances) so the row can expand to show
+  // per-heat detail and MTR documents.
   const globalUnallocated = useMemo(() => {
     const validJobIds = new Set(jobs.map(j => j.id));
     const byName = new Map<string, {
@@ -68,15 +74,15 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
     }>();
 
     for (const item of allUnallocatedPool) {
-      if (!item.jobId || !validJobIds.has(item.jobId)) continue;
+      if (item.jobId && !validJobIds.has(item.jobId)) continue;
       const key = item.name.trim();
       if (!byName.has(key)) {
         byName.set(key, { name: key, sku: item.sku, category: item.category, unit: item.unit, total: 0, byJob: [], heatRecords: [] });
       }
       const entry = byName.get(key)!;
       entry.total += item.quantity;
-      const jobNumber = jobNumberById.get(item.jobId) || 'Unknown Job';
-      entry.byJob.push({ jobId: item.jobId, jobNumber, quantity: item.quantity });
+      const jobNumber = item.jobId ? (jobNumberById.get(item.jobId) || 'Unknown Job') : 'Global';
+      entry.byJob.push({ jobId: item.jobId || '__global__', jobNumber, quantity: item.quantity });
       for (const instance of item.instances || []) {
         entry.heatRecords.push({
           instance,
@@ -129,7 +135,7 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
             <div className="flex items-center gap-3">
               <AlertCircle size={18} className="text-amber-600 shrink-0" />
               <p className="tech-label text-amber-800 normal-case tracking-normal">
-                {totalOrphaned} record{totalOrphaned === 1 ? '' : 's'} found with no job (or a deleted job) - {orphanedCounts.materials} materials, {orphanedCounts.unallocatedPool} unallocated, {orphanedCounts.spools} spools, {orphanedCounts.manifests} manifests, {orphanedCounts.logs} logs.
+                {totalOrphaned} record{totalOrphaned === 1 ? '' : 's'} found belonging to a deleted job - {orphanedCounts.materials} materials, {orphanedCounts.unallocatedPool} unallocated, {orphanedCounts.spools} spools, {orphanedCounts.manifests} manifests, {orphanedCounts.logs} logs.
               </p>
             </div>
             <button
@@ -218,9 +224,18 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
                 <p className="tech-label">Unassigned stock on hand across every job</p>
               </div>
             </div>
-            <span className="tech-label text-[9px] px-2 py-1 bg-industrial-bg font-bold">
-              {globalUnallocated.length} UNIQUE ITEMS
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="tech-label text-[9px] px-2 py-1 bg-industrial-bg font-bold">
+                {globalUnallocated.length} UNIQUE ITEMS
+              </span>
+              <button
+                onClick={() => setIsAddInventoryOpen(true)}
+                className="bg-industrial-ink text-white px-3 py-1.5 text-[10px] tech-value flex items-center gap-1.5 hover:bg-industrial-accent hover:text-industrial-ink transition-colors font-bold"
+              >
+                <Plus size={12} />
+                Add Global Inventory
+              </button>
+            </div>
           </div>
 
           {globalUnallocated.length === 0 ? (
@@ -266,7 +281,12 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
                               {item.byJob.map(({ jobId, jobNumber, quantity }) => (
                                 <span
                                   key={`${item.name}-${jobId}`}
-                                  className="tech-label text-[9px] px-2 py-1 bg-industrial-bg border border-industrial-line/10"
+                                  className={cn(
+                                    'tech-label text-[9px] px-2 py-1 border font-bold',
+                                    jobId === '__global__'
+                                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                      : 'bg-industrial-bg border-industrial-line/10'
+                                  )}
                                 >
                                   {jobNumber}: {quantity.toLocaleString()}
                                 </span>
@@ -494,7 +514,7 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
               </div>
               <h2 className="tech-value text-xl mb-2 text-industrial-ink uppercase tracking-tight">Clear Orphaned Data?</h2>
               <p className="tech-label text-sm opacity-60 mb-8 leading-relaxed">
-                This permanently deletes {totalOrphaned} record{totalOrphaned === 1 ? '' : 's'} with no job (or a deleted job): {orphanedCounts.materials} materials, {orphanedCounts.unallocatedPool} unallocated, {orphanedCounts.spools} spools, {orphanedCounts.manifests} manifests, {orphanedCounts.logs} logs. No existing job's data is affected. This action cannot be undone.
+                This permanently deletes {totalOrphaned} record{totalOrphaned === 1 ? '' : 's'} belonging to a deleted job: {orphanedCounts.materials} materials, {orphanedCounts.unallocatedPool} unallocated, {orphanedCounts.spools} spools, {orphanedCounts.manifests} manifests, {orphanedCounts.logs} logs. Global stock and every existing job's data is unaffected. This action cannot be undone.
               </p>
               <div className="flex flex-col gap-3">
                 <button
@@ -517,6 +537,18 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
 
       <AnimatePresence>
         {viewingMTR && <MTRViewer record={viewingMTR} onClose={() => setViewingMTR(null)} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isAddInventoryOpen && (
+          <AddGlobalInventoryModal
+            onClose={() => setIsAddInventoryOpen(false)}
+            onSubmit={(input) => {
+              onAddGlobalInventory(input);
+              setIsAddInventoryOpen(false);
+            }}
+          />
+        )}
       </AnimatePresence>
     </div>
   );

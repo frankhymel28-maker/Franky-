@@ -184,10 +184,10 @@ export function deleteJob(jobId: string) {
   console.log(`[SQLITE] Deleted job ${jobId} and its data.`);
 }
 
-// Removes materials/unallocated/spools/manifests/logs that have no jobId,
-// or a jobId that doesn't match any job currently in the jobs table -
-// records left behind by data created before the Jobs feature existed, or
-// belonging to a job that was since deleted.
+// Removes materials/unallocated/spools/manifests/logs whose jobId points to
+// a job that no longer exists - leftover from a deleted job. Records with
+// NO jobId at all are intentionally-global stock (never tied to a job),
+// not orphaned, and are left alone.
 export function cleanupOrphanedData(): Record<string, number> {
   const validJobIds = new Set(
     (db.prepare('SELECT id FROM jobs').all() as { id: string }[]).map(r => r.id)
@@ -201,7 +201,7 @@ export function cleanupOrphanedData(): Record<string, number> {
       const orphanedIds: string[] = [];
       for (const row of rows) {
         const jobId = JSON.parse(row.data)?.jobId;
-        if (!jobId || !validJobIds.has(jobId)) {
+        if (jobId && !validJobIds.has(jobId)) {
           del.run(row.id);
           orphanedIds.push(row.id);
         }

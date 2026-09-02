@@ -40,6 +40,7 @@ import { SpoolUpload } from './components/SpoolUpload';
 import { ManifestTicket } from './components/ManifestTicket';
 import { JobsDashboard } from './components/JobsDashboard';
 import { MTRViewer } from './components/MTRViewer';
+import { GlobalHeatLine } from './components/AddGlobalInventoryModal';
 import { GoogleGenAI, Type } from "@google/genai";
 import {
   loadLocalState,
@@ -1335,9 +1336,12 @@ export default function App() {
   // Records with no jobId, or a jobId that doesn't match any current job -
   // left behind by data created before the Jobs feature existed, or
   // belonging to a job that was since deleted.
+  // A record with a jobId pointing to a job that no longer exists is
+  // orphaned (leftover from a deleted job). A record with NO jobId at all
+  // is intentionally-global stock (never tied to a job), not orphaned.
   const orphanedCounts = useMemo(() => {
     const validJobIds = new Set(jobs.map(j => j.id));
-    const isOrphaned = (item: { jobId?: string }) => !item.jobId || !validJobIds.has(item.jobId);
+    const isOrphaned = (item: { jobId?: string }) => !!item.jobId && !validJobIds.has(item.jobId);
     return {
       materials: allMaterials.filter(isOrphaned).length,
       unallocatedPool: allUnallocatedPool.filter(isOrphaned).length,
@@ -1349,7 +1353,7 @@ export default function App() {
 
   const handleClearOrphanedData = async () => {
     const validJobIds = new Set(jobs.map(j => j.id));
-    const keep = <T extends { jobId?: string }>(item: T) => !!item.jobId && validJobIds.has(item.jobId);
+    const keep = <T extends { jobId?: string }>(item: T) => !item.jobId || validJobIds.has(item.jobId);
     setAllMaterials(prev => prev.filter(keep));
     setAllUnallocatedPool(prev => prev.filter(keep));
     setAllSpools(prev => prev.filter(keep));
@@ -1361,6 +1365,49 @@ export default function App() {
     } catch (err) {
       console.error('[SYNC] Failed to clean up orphaned data on server:', err);
     }
+  };
+
+  // Adds stock directly to the global (no job) unallocated pool - material
+  // that was never for a specific job. Merges into an existing global item
+  // of the same name/SKU if one exists, same as a normal per-job receipt.
+  const handleAddGlobalInventory = (input: { name: string; sku: string; category: string; unit: string; heatLines: GlobalHeatLine[] }) => {
+    const now = Date.now();
+    const newInstances: MaterialInstance[] = input.heatLines.map((line, idx) => ({
+      id: `inst-global-${now}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+      heatNumber: line.heatNumber || 'PENDING',
+      mtrNumber: line.mtrNumber || 'PENDING',
+      vendor: line.vendor,
+      mtrUrl: line.fileData,
+      receivedDate: now,
+      quantity: line.quantity,
+      qualityStatus: 'pending',
+    }));
+    const totalQty = input.heatLines.reduce((acc, l) => acc + (l.quantity || 0), 0);
+
+    setAllUnallocatedPool(prev => {
+      const existingIdx = prev.findIndex(item => !item.jobId && item.name === input.name && item.sku === input.sku);
+      if (existingIdx >= 0) {
+        const next = [...prev];
+        next[existingIdx] = {
+          ...next[existingIdx],
+          quantity: next[existingIdx].quantity + totalQty,
+          instances: [...next[existingIdx].instances, ...newInstances],
+          lastUpdated: now,
+        };
+        return next;
+      }
+      return [...prev, {
+        id: `pool-global-${now}-${Math.random().toString(36).substr(2, 4)}`,
+        // No jobId - intentionally global stock, not tied to any job.
+        name: input.name,
+        sku: input.sku,
+        category: input.category,
+        unit: input.unit,
+        quantity: totalQty,
+        instances: newInstances,
+        lastUpdated: now,
+      }];
+    });
   };
 
   const createManifest = () => {
@@ -1438,6 +1485,7 @@ export default function App() {
         onCreateJob={handleCreateJob}
         onDeleteJob={handleDeleteJob}
         onClearOrphanedData={handleClearOrphanedData}
+        onAddGlobalInventory={handleAddGlobalInventory}
       />
     );
   }
