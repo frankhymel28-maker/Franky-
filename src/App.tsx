@@ -1571,6 +1571,7 @@ export default function App() {
       <JobsDashboard
         jobs={jobs}
         allMaterials={allMaterials}
+        allUnallocatedPool={allUnallocatedPool}
         allSpools={allSpools}
         allManifests={allManifests}
         onOpenJob={setActiveJobId}

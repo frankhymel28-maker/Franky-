@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
-import { Briefcase, Plus, X, MapPin, Building2, Trash2, Package, Truck, ClipboardList, AlertCircle } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Briefcase, Plus, X, MapPin, Building2, Trash2, Package, Truck, ClipboardList, AlertCircle, Boxes } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
-import { Job, Material, Spool, Manifest } from '../types';
+import { Job, Material, Spool, Manifest, UnallocatedItem } from '../types';
 
 interface JobsDashboardProps {
   jobs: Job[];
   allMaterials: Material[];
+  allUnallocatedPool: UnallocatedItem[];
   allSpools: Spool[];
   allManifests: Manifest[];
   onOpenJob: (jobId: string) => void;
@@ -23,6 +24,7 @@ const STATUS_STYLES: Record<Job['status'], string> = {
 export const JobsDashboard: React.FC<JobsDashboardProps> = ({
   jobs,
   allMaterials,
+  allUnallocatedPool,
   allSpools,
   allManifests,
   onOpenJob,
@@ -35,6 +37,37 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
   const [clientName, setClientName] = useState('');
   const [siteAddress, setSiteAddress] = useState('');
   const [status, setStatus] = useState<Job['status']>('active');
+
+  const jobNumberById = useMemo(() => new Map(jobs.map(j => [j.id, j.jobNumber])), [jobs]);
+
+  // Same material aggregated across multiple jobs' unallocated pools is
+  // merged into one row (grouped by name), with a per-job quantity
+  // breakdown, so the same part number bought for two jobs shows as one
+  // line rather than duplicates.
+  const globalUnallocated = useMemo(() => {
+    const byName = new Map<string, {
+      name: string; sku: string; category: string; unit: string;
+      total: number; byJob: { jobId: string; jobNumber: string; quantity: number }[];
+    }>();
+
+    for (const item of allUnallocatedPool) {
+      const key = item.name.trim();
+      if (!byName.has(key)) {
+        byName.set(key, { name: key, sku: item.sku, category: item.category, unit: item.unit, total: 0, byJob: [] });
+      }
+      const entry = byName.get(key)!;
+      entry.total += item.quantity;
+      if (item.jobId) {
+        entry.byJob.push({
+          jobId: item.jobId,
+          jobNumber: jobNumberById.get(item.jobId) || 'Unknown Job',
+          quantity: item.quantity,
+        });
+      }
+    }
+
+    return Array.from(byName.values()).sort((a, b) => b.total - a.total);
+  }, [allUnallocatedPool, jobNumberById]);
 
   const resetForm = () => {
     setJobNumber('');
@@ -134,6 +167,68 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
             })}
           </div>
         )}
+
+        <div className="mt-8 bg-white border border-industrial-line/10">
+          <div className="p-4 border-b border-industrial-line/10 bg-industrial-bg/10 flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <Boxes size={16} className="opacity-50" />
+              <div>
+                <h2 className="tech-value text-sm">Global Unallocated Inventory</h2>
+                <p className="tech-label">Unassigned stock on hand across every job</p>
+              </div>
+            </div>
+            <span className="tech-label text-[9px] px-2 py-1 bg-industrial-bg font-bold">
+              {globalUnallocated.length} UNIQUE ITEMS
+            </span>
+          </div>
+
+          {globalUnallocated.length === 0 ? (
+            <div className="py-16 flex flex-col items-center justify-center text-center">
+              <Boxes size={28} className="opacity-20 mb-3" />
+              <p className="tech-label">No unallocated materials in any job yet</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-industrial-line/10 bg-industrial-bg/30">
+                    <th className="px-6 py-3 tech-label">Material / SKU</th>
+                    <th className="px-6 py-3 tech-label text-right">Total On Hand</th>
+                    <th className="px-6 py-3 tech-label">By Job</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-industrial-line/5">
+                  {globalUnallocated.map((item, idx) => (
+                    <tr key={`global-unalloc-${item.name}-${idx}`} className="hover:bg-industrial-bg/30 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="tech-value text-sm">{item.name}</span>
+                          <span className="tech-label lowercase opacity-40">{item.sku} &middot; {item.category}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <span className="tech-value text-sm font-bold">{item.total.toLocaleString()}</span>
+                        <span className="tech-label lowercase ml-1">{item.unit}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1.5">
+                          {item.byJob.map(({ jobId, jobNumber, quantity }) => (
+                            <span
+                              key={`${item.name}-${jobId}`}
+                              className="tech-label text-[9px] px-2 py-1 bg-industrial-bg border border-industrial-line/10"
+                            >
+                              {jobNumber}: {quantity.toLocaleString()}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </main>
 
       <AnimatePresence>
