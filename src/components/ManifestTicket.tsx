@@ -10,15 +10,22 @@ import { SignatureModal } from './SignatureModal';
 interface ManifestTicketProps {
   manifest: Manifest;
   spools: Spool[];
+  // Always the owning job's current client name / project title - not
+  // stored on the manifest, so renaming the job updates every ticket under
+  // it immediately rather than freezing whatever it was at creation time.
+  clientName: string;
+  jobTitle: string;
   onClose: () => void;
   onUpdateStatus?: (status: Manifest['status'], extra?: Partial<Manifest>) => void;
   onUpdateManifest?: (updates: Partial<Manifest>) => void;
 }
 
-export const ManifestTicket: React.FC<ManifestTicketProps> = ({ 
-  manifest, 
-  spools, 
-  onClose, 
+export const ManifestTicket: React.FC<ManifestTicketProps> = ({
+  manifest,
+  spools,
+  clientName,
+  jobTitle,
+  onClose,
   onUpdateStatus,
   onUpdateManifest
 }) => {
@@ -248,38 +255,13 @@ export const ManifestTicket: React.FC<ManifestTicketProps> = ({
             <div className="flex justify-between items-start border-b-4 border-industrial-ink pb-8">
               <div className="flex flex-col flex-1">
                 <img src="/logo.png" alt="Turner Industries" className="h-20 w-full max-w-sm object-contain object-left" referrerPolicy="no-referrer" />
-                <div className="mt-2 group">
-                   {isEditing ? (
-                     <div className="flex flex-col gap-2">
-                        <div className="flex flex-col">
-                          <label className="tech-label text-[8px] uppercase text-industrial-accent">Client Name</label>
-                          <input
-                            value={editedManifest.clientName || ''}
-                            onChange={(e) => handleChange('clientName', e.target.value)}
-                            placeholder="ENTER CLIENT NAME..."
-                            className="tech-value text-xs border-b border-industrial-line/30 focus:border-industrial-accent outline-none bg-transparent py-1 w-full max-w-sm"
-                          />
-                        </div>
-                        <div className="flex flex-col">
-                          <label className="tech-label text-[8px] uppercase text-industrial-accent">Job Title</label>
-                          <input
-                            value={editedManifest.jobTitle || ''}
-                            onChange={(e) => handleChange('jobTitle', e.target.value)}
-                            placeholder="ENTER JOB TITLE..."
-                            className="tech-value text-xs border-b border-industrial-line/30 focus:border-industrial-accent outline-none bg-transparent py-1 w-full max-w-sm"
-                          />
-                        </div>
-                     </div>
-                   ) : (
-                     <div className="flex flex-col gap-0.5">
-                       <span className="text-[10px] font-sans uppercase font-bold tracking-[0.2em]">
-                         {manifest.clientName || '—'}
-                       </span>
-                       {manifest.jobTitle && (
-                         <span className="tech-label text-[9px] uppercase opacity-60">{manifest.jobTitle}</span>
-                       )}
-                     </div>
-                   )}
+                <div className="mt-2 flex flex-col gap-0.5" title="Derived from the job - rename the job to update this">
+                  <span className="text-[10px] font-sans uppercase font-bold tracking-[0.2em]">
+                    {clientName || '—'}
+                  </span>
+                  {jobTitle && (
+                    <span className="tech-label text-[9px] uppercase opacity-60">{jobTitle}</span>
+                  )}
                 </div>
               </div>
               <div className="text-right flex flex-col gap-1 shrink-0">

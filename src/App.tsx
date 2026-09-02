@@ -1458,8 +1458,6 @@ export default function App() {
     const newManifest: Manifest = {
       id: manifestId,
       manifestNumber: `TICKET-${Math.floor(1000 + Math.random() * 9000)}`,
-      clientName: activeJob?.clientName,
-      jobTitle: activeJob?.projectName || activeJob?.jobNumber,
       origin: '6277 Industrial Drive',
       destination: 'Plaquemine Site A',
       status: 'draft',
@@ -1723,6 +1721,8 @@ export default function App() {
                   key="manifest-ticket-modal"
                   manifest={manifests.find(m => m.id === viewingManifestId)!}
                   spools={spools}
+                  clientName={activeJob?.clientName || ''}
+                  jobTitle={activeJob?.projectName || activeJob?.jobNumber || ''}
                   onClose={() => setViewingManifestId(null)}
                   onUpdateManifest={(updates) => updateManifest(viewingManifestId, updates)}
                   onUpdateStatus={(status, extra) => {
