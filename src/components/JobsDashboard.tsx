@@ -155,10 +155,12 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
     <div className="min-h-screen bg-industrial-bg">
       <header className="h-16 border-b border-industrial-line/10 bg-white flex items-center justify-between px-6">
         <div className="flex items-center gap-3">
-          <div className="w-6 h-6 flex items-center justify-center bg-green-600">
-            <span className="text-white font-bold text-[10px]">F</span>
+          <div className="h-6 px-2.5 flex items-center justify-center bg-green-600">
+            <span className="text-white font-bold text-[10px] tracking-wide">FRANKY</span>
           </div>
           <h1 className="tech-value text-lg">Jobs</h1>
+          <div className="h-4 w-[1px] bg-industrial-line/20" />
+          <span className="tech-label text-[10px]">Material Management Dashboard</span>
         </div>
         <button
           onClick={() => setIsCreateOpen(true)}
