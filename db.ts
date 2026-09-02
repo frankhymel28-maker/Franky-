@@ -38,6 +38,12 @@ export function initDb() {
       lastUpdated INTEGER,
       data TEXT
     );
+    CREATE TABLE IF NOT EXISTS tombstones (
+      tableName TEXT,
+      id TEXT,
+      deletedAt INTEGER,
+      PRIMARY KEY (tableName, id)
+    );
   `);
 
   console.log('[SQLITE] Database tables checked/created.');
@@ -83,27 +89,45 @@ interface SyncPayload {
 export function syncTable(tableName: string, clientRecords: any[]): any[] {
   const selectStmt = db.prepare(`SELECT lastUpdated, data FROM ${tableName} WHERE id = ?`);
   const insertStmt = db.prepare(`INSERT OR REPLACE INTO ${tableName} (id, lastUpdated, data) VALUES (?, ?, ?)`);
+  const tombstoneStmt = db.prepare(`SELECT deletedAt FROM tombstones WHERE tableName = ? AND id = ?`);
 
   // Start a transaction for speed and integrity
   const transaction = db.transaction(() => {
     for (const record of clientRecords) {
       if (!record.id) continue;
       const recordLastUpdated = record.lastUpdated || record.timestamp || Date.now();
-      
+
+      // A client can still be mid-flight with a copy of a record from
+      // before it was explicitly deleted (Clear All, Delete Job, orphaned
+      // cleanup) - without this check, this insert-only merge would
+      // resurrect it. Only let the record back in if the client's copy is
+      // genuinely newer than the deletion.
+      const tombstone = tombstoneStmt.get(tableName, record.id) as { deletedAt: number } | undefined;
+      if (tombstone && tombstone.deletedAt >= recordLastUpdated) {
+        continue;
+      }
+
       const existing = selectStmt.get(record.id) as { lastUpdated: number; data: string } | undefined;
-      
+
       if (!existing || recordLastUpdated > existing.lastUpdated) {
         // Client record is newer or doesn't exist, update database
         insertStmt.run(record.id, recordLastUpdated, JSON.stringify(record));
       }
     }
   });
-  
+
   transaction();
 
   // Retrieve all updated records from this table to send back to the client
   const allRecords = db.prepare(`SELECT data FROM ${tableName}`).all() as { data: string }[];
   return allRecords.map(r => JSON.parse(r.data));
+}
+
+function tombstoneIds(tableName: string, ids: string[]) {
+  if (ids.length === 0) return;
+  const now = Date.now();
+  const stmt = db.prepare(`INSERT OR REPLACE INTO tombstones (tableName, id, deletedAt) VALUES (?, ?, ?)`);
+  for (const id of ids) stmt.run(tableName, id, now);
 }
 
 export function handleSync(payload: SyncPayload): SyncPayload {
@@ -137,7 +161,9 @@ const JOB_SCOPED_TABLES = ['materials', 'unallocated', 'spools', 'manifests', 'l
 export function clearJobData(jobId: string) {
   const transaction = db.transaction(() => {
     for (const table of JOB_SCOPED_TABLES) {
+      const rows = db.prepare(`SELECT id FROM ${table} WHERE json_extract(data, '$.jobId') = ?`).all(jobId) as { id: string }[];
       db.prepare(`DELETE FROM ${table} WHERE json_extract(data, '$.jobId') = ?`).run(jobId);
+      tombstoneIds(table, rows.map(r => r.id));
     }
   });
   transaction();
@@ -147,9 +173,12 @@ export function clearJobData(jobId: string) {
 export function deleteJob(jobId: string) {
   const transaction = db.transaction(() => {
     for (const table of JOB_SCOPED_TABLES) {
+      const rows = db.prepare(`SELECT id FROM ${table} WHERE json_extract(data, '$.jobId') = ?`).all(jobId) as { id: string }[];
       db.prepare(`DELETE FROM ${table} WHERE json_extract(data, '$.jobId') = ?`).run(jobId);
+      tombstoneIds(table, rows.map(r => r.id));
     }
     db.prepare('DELETE FROM jobs WHERE id = ?').run(jobId);
+    tombstoneIds('jobs', [jobId]);
   });
   transaction();
   console.log(`[SQLITE] Deleted job ${jobId} and its data.`);
@@ -169,15 +198,16 @@ export function cleanupOrphanedData(): Record<string, number> {
     for (const table of JOB_SCOPED_TABLES) {
       const rows = db.prepare(`SELECT id, data FROM ${table}`).all() as { id: string; data: string }[];
       const del = db.prepare(`DELETE FROM ${table} WHERE id = ?`);
-      let count = 0;
+      const orphanedIds: string[] = [];
       for (const row of rows) {
         const jobId = JSON.parse(row.data)?.jobId;
         if (!jobId || !validJobIds.has(jobId)) {
           del.run(row.id);
-          count++;
+          orphanedIds.push(row.id);
         }
       }
-      removed[table] = count;
+      tombstoneIds(table, orphanedIds);
+      removed[table] = orphanedIds.length;
     }
   });
   transaction();
