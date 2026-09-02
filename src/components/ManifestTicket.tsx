@@ -250,19 +250,35 @@ export const ManifestTicket: React.FC<ManifestTicketProps> = ({
                 <img src="/logo.png" alt="Turner Industries" className="h-20 w-full max-w-sm object-contain object-left" referrerPolicy="no-referrer" />
                 <div className="mt-2 group">
                    {isEditing ? (
-                     <div className="flex flex-col">
-                        <label className="tech-label text-[8px] uppercase text-industrial-accent">Client Name</label>
-                        <input 
-                          value={editedManifest.clientName || ''}
-                          onChange={(e) => handleChange('clientName', e.target.value)}
-                          placeholder="ENTER CLIENT NAME..."
-                          className="tech-value text-xs border-b border-industrial-line/30 focus:border-industrial-accent outline-none bg-transparent py-1 w-full max-w-sm"
-                        />
+                     <div className="flex flex-col gap-2">
+                        <div className="flex flex-col">
+                          <label className="tech-label text-[8px] uppercase text-industrial-accent">Client Name</label>
+                          <input
+                            value={editedManifest.clientName || ''}
+                            onChange={(e) => handleChange('clientName', e.target.value)}
+                            placeholder="ENTER CLIENT NAME..."
+                            className="tech-value text-xs border-b border-industrial-line/30 focus:border-industrial-accent outline-none bg-transparent py-1 w-full max-w-sm"
+                          />
+                        </div>
+                        <div className="flex flex-col">
+                          <label className="tech-label text-[8px] uppercase text-industrial-accent">Job Title</label>
+                          <input
+                            value={editedManifest.jobTitle || ''}
+                            onChange={(e) => handleChange('jobTitle', e.target.value)}
+                            placeholder="ENTER JOB TITLE..."
+                            className="tech-value text-xs border-b border-industrial-line/30 focus:border-industrial-accent outline-none bg-transparent py-1 w-full max-w-sm"
+                          />
+                        </div>
                      </div>
                    ) : (
-                     <span className="text-[10px] font-sans uppercase font-bold tracking-[0.2em]">
-                       {manifest.clientName || '6277 Industrial Drive Fabrication'}
-                     </span>
+                     <div className="flex flex-col gap-0.5">
+                       <span className="text-[10px] font-sans uppercase font-bold tracking-[0.2em]">
+                         {manifest.clientName || '—'}
+                       </span>
+                       {manifest.jobTitle && (
+                         <span className="tech-label text-[9px] uppercase opacity-60">{manifest.jobTitle}</span>
+                       )}
+                     </div>
                    )}
                 </div>
               </div>

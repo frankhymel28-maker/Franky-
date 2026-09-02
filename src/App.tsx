@@ -1458,6 +1458,8 @@ export default function App() {
     const newManifest: Manifest = {
       id: manifestId,
       manifestNumber: `TICKET-${Math.floor(1000 + Math.random() * 9000)}`,
+      clientName: activeJob?.clientName,
+      jobTitle: activeJob?.projectName || activeJob?.jobNumber,
       origin: '6277 Industrial Drive',
       destination: 'Plaquemine Site A',
       status: 'draft',

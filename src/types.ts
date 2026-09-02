@@ -114,6 +114,7 @@ export interface Manifest {
   jobId?: string;
   manifestNumber: string;
   clientName?: string;
+  jobTitle?: string;
   trailerNumber?: string;
   truckNumber?: string;
   driverName?: string;
