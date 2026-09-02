@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { Briefcase, Plus, X, MapPin, Trash2, Package, Truck, ClipboardList, AlertCircle, Boxes, Hash } from 'lucide-react';
+import { Briefcase, Plus, X, MapPin, Trash2, Package, Truck, ClipboardList, AlertCircle, Boxes, Hash, ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { Job, Material, Spool, Manifest, UnallocatedItem } from '../types';
+import { MTRViewer } from './MTRViewer';
 
 interface JobsDashboardProps {
   jobs: Job[];
@@ -43,6 +44,8 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
   const [clientName, setClientName] = useState('');
   const [siteAddress, setSiteAddress] = useState('');
   const [status, setStatus] = useState<Job['status']>('active');
+  const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
+  const [viewingMTR, setViewingMTR] = useState<any | null>(null);
 
   const jobNumberById = useMemo(() => new Map(jobs.map(j => [j.id, j.jobNumber])), [jobs]);
   const totalOrphaned = orphanedCounts.materials + orphanedCounts.unallocatedPool + orphanedCounts.spools + orphanedCounts.manifests + orphanedCounts.logs;
@@ -52,27 +55,33 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
   // breakdown, so the same part number bought for two jobs shows as one
   // line rather than duplicates. Items with no job (or a deleted job) are
   // orphaned data, not real per-job inventory, so they're excluded here -
-  // see the "Clear Orphaned Data" action instead.
+  // see the "Clear Orphaned Data" action instead. Each row also carries its
+  // heat records (from every underlying UnallocatedItem's instances) so the
+  // row can expand to show per-heat detail and MTR documents.
   const globalUnallocated = useMemo(() => {
     const validJobIds = new Set(jobs.map(j => j.id));
     const byName = new Map<string, {
       name: string; sku: string; category: string; unit: string;
-      total: number; byJob: { jobId: string; jobNumber: string; quantity: number }[];
+      total: number;
+      byJob: { jobId: string; jobNumber: string; quantity: number }[];
+      heatRecords: { instance: UnallocatedItem['instances'][number]; jobNumber: string; material: { name: string; sku: string; category: string } }[];
     }>();
 
     for (const item of allUnallocatedPool) {
       if (!item.jobId || !validJobIds.has(item.jobId)) continue;
       const key = item.name.trim();
       if (!byName.has(key)) {
-        byName.set(key, { name: key, sku: item.sku, category: item.category, unit: item.unit, total: 0, byJob: [] });
+        byName.set(key, { name: key, sku: item.sku, category: item.category, unit: item.unit, total: 0, byJob: [], heatRecords: [] });
       }
       const entry = byName.get(key)!;
       entry.total += item.quantity;
-      if (item.jobId) {
-        entry.byJob.push({
-          jobId: item.jobId,
-          jobNumber: jobNumberById.get(item.jobId) || 'Unknown Job',
-          quantity: item.quantity,
+      const jobNumber = jobNumberById.get(item.jobId) || 'Unknown Job';
+      entry.byJob.push({ jobId: item.jobId, jobNumber, quantity: item.quantity });
+      for (const instance of item.instances || []) {
+        entry.heatRecords.push({
+          instance,
+          jobNumber,
+          material: { name: item.name, sku: item.sku, category: item.category },
         });
       }
     }
@@ -224,38 +233,104 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-industrial-line/10 bg-industrial-bg/30">
+                    <th className="px-6 py-3 tech-label w-8"></th>
                     <th className="px-6 py-3 tech-label">Material / SKU</th>
                     <th className="px-6 py-3 tech-label text-right">Total On Hand</th>
                     <th className="px-6 py-3 tech-label">By Job</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-industrial-line/5">
-                  {globalUnallocated.map((item, idx) => (
-                    <tr key={`global-unalloc-${item.name}-${idx}`} className="hover:bg-industrial-bg/30 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col">
-                          <span className="tech-value text-sm">{item.name}</span>
-                          <span className="tech-label lowercase opacity-40">{item.sku} &middot; {item.category}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <span className="tech-value text-sm font-bold">{item.total.toLocaleString()}</span>
-                        <span className="tech-label lowercase ml-1">{item.unit}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-wrap gap-1.5">
-                          {item.byJob.map(({ jobId, jobNumber, quantity }) => (
-                            <span
-                              key={`${item.name}-${jobId}`}
-                              className="tech-label text-[9px] px-2 py-1 bg-industrial-bg border border-industrial-line/10"
-                            >
-                              {jobNumber}: {quantity.toLocaleString()}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {globalUnallocated.map((item, idx) => {
+                    const isExpanded = expandedMaterial === item.name;
+                    return (
+                      <React.Fragment key={`global-unalloc-${item.name}-${idx}`}>
+                        <tr
+                          onClick={() => setExpandedMaterial(isExpanded ? null : item.name)}
+                          className="hover:bg-industrial-bg/30 transition-colors cursor-pointer"
+                        >
+                          <td className="pl-6 py-4 opacity-40">
+                            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col">
+                              <span className="tech-value text-sm">{item.name}</span>
+                              <span className="tech-label lowercase opacity-40">{item.sku} &middot; {item.category}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <span className="tech-value text-sm font-bold">{item.total.toLocaleString()}</span>
+                            <span className="tech-label lowercase ml-1">{item.unit}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-wrap gap-1.5">
+                              {item.byJob.map(({ jobId, jobNumber, quantity }) => (
+                                <span
+                                  key={`${item.name}-${jobId}`}
+                                  className="tech-label text-[9px] px-2 py-1 bg-industrial-bg border border-industrial-line/10"
+                                >
+                                  {jobNumber}: {quantity.toLocaleString()}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={4} className="p-0 bg-industrial-bg/20">
+                              {item.heatRecords.length === 0 ? (
+                                <p className="tech-label px-6 py-4">No heat records logged for this material.</p>
+                              ) : (
+                                <table className="w-full text-left border-collapse">
+                                  <thead>
+                                    <tr className="border-b border-industrial-line/10">
+                                      <th className="pl-14 pr-6 py-2 tech-label text-[9px]">Heat Number</th>
+                                      <th className="px-6 py-2 tech-label text-[9px]">MTR Reference</th>
+                                      <th className="px-6 py-2 tech-label text-[9px]">Job</th>
+                                      <th className="px-6 py-2 tech-label text-[9px] text-right">Qty</th>
+                                      <th className="px-6 py-2 tech-label text-[9px]">Quality</th>
+                                      <th className="px-6 py-2 tech-label text-[9px] text-right">Documentation</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-industrial-line/5">
+                                    {item.heatRecords.map(({ instance, jobNumber, material }, hIdx) => (
+                                      <tr key={`heat-${item.name}-${instance.id}-${hIdx}`}>
+                                        <td className="pl-14 pr-6 py-3 tech-value text-xs font-bold">{instance.heatNumber || '—'}</td>
+                                        <td className="px-6 py-3 tech-label">{instance.mtrNumber || '—'}</td>
+                                        <td className="px-6 py-3 tech-label">{jobNumber}</td>
+                                        <td className="px-6 py-3 text-right tech-value text-xs">{instance.quantity?.toLocaleString() ?? '—'}</td>
+                                        <td className="px-6 py-3">
+                                          <span className={cn(
+                                            'tech-label text-[9px] px-2 py-0.5 border font-bold',
+                                            instance.qualityStatus === 'verified' ? 'bg-green-50 text-green-700 border-green-200' :
+                                            instance.qualityStatus === 'rejected' ? 'bg-red-50 text-red-700 border-red-200' :
+                                            'bg-amber-50 text-amber-700 border-amber-200'
+                                          )}>
+                                            {instance.qualityStatus}
+                                          </span>
+                                        </td>
+                                        <td className="px-6 py-3 text-right">
+                                          {instance.mtrUrl ? (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setViewingMTR({ ...instance, material }); }}
+                                              className="inline-flex items-center gap-1.5 px-2 py-1 bg-industrial-ink text-white tech-label text-[9px] font-bold hover:bg-industrial-accent hover:text-industrial-ink transition-colors"
+                                            >
+                                              <FileText size={11} /> View MTR
+                                            </button>
+                                          ) : (
+                                            <span className="tech-label text-[9px] opacity-40">No MTR on file</span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -438,6 +513,10 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
             </motion.div>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {viewingMTR && <MTRViewer record={viewingMTR} onClose={() => setViewingMTR(null)} />}
       </AnimatePresence>
     </div>
   );
