@@ -1693,8 +1693,11 @@ export default function App() {
             </h1>
             <div className="h-4 w-[1px] bg-industrial-line/20" />
             <div className="flex flex-col leading-tight">
-              <span className="tech-value text-xs font-bold">{activeJob.jobNumber}</span>
-              <span className="tech-label text-[10px] opacity-60">{activeJob.projectName || activeJob.clientName}</span>
+              <span className="tech-value text-sm font-bold">{activeJob.clientName}</span>
+              {activeJob.projectName && (
+                <span className="tech-label text-[10px] opacity-70">{activeJob.projectName}</span>
+              )}
+              <span className="tech-label text-[9px] opacity-40">#{activeJob.jobNumber}</span>
             </div>
             <div className="h-4 w-[1px] bg-industrial-line/20" />
             <div className="flex items-center gap-4" title={lastSyncedTime ? `Last synced at ${new Date(lastSyncedTime).toLocaleTimeString()}` : 'Not synced yet'}>
