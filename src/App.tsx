@@ -1407,6 +1407,24 @@ export default function App() {
     });
   };
 
+  // Removes specific unallocated-pool records (e.g. a material's line in
+  // the Global Unallocated Inventory table, which can span several
+  // UnallocatedItem records across jobs and global stock). syncTable() only
+  // ever inserts/updates, so the dedicated endpoint is what actually makes
+  // the deletion stick server-side.
+  const handleDeleteUnallocatedItems = async (itemIds: string[]) => {
+    setAllUnallocatedPool(prev => prev.filter(item => !itemIds.includes(item.id)));
+    try {
+      await fetch('/api/unallocated/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemIds }),
+      });
+    } catch (err) {
+      console.error('[SYNC] Failed to delete unallocated items on server:', err);
+    }
+  };
+
   const createManifest = () => {
     if (selectedSpoolIds.length === 0) return;
     
@@ -1483,6 +1501,7 @@ export default function App() {
         onDeleteJob={handleDeleteJob}
         onClearOrphanedData={handleClearOrphanedData}
         onAddGlobalInventory={handleAddGlobalInventory}
+        onDeleteUnallocatedItems={handleDeleteUnallocatedItems}
       />
     );
   }

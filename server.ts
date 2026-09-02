@@ -3,7 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { fileURLToPath } from 'url';
 import nodemailer from "nodemailer";
-import { initDb, handleSync, clearJobData, deleteJob, cleanupOrphanedData, getWholeDbState } from "./db.js";
+import { initDb, handleSync, clearJobData, deleteJob, cleanupOrphanedData, deleteUnallocatedItems, getWholeDbState } from "./db.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -76,6 +76,21 @@ async function startServer() {
     } catch (error) {
       console.error("Cleanup orphaned data failed", error);
       res.status(500).json({ success: false, message: "Failed to clean up orphaned data" });
+    }
+  });
+
+  app.post("/api/unallocated/delete", (req, res) => {
+    const { itemIds } = req.body;
+    if (!Array.isArray(itemIds) || itemIds.length === 0) {
+      res.status(400).json({ success: false, message: "itemIds (non-empty array) is required" });
+      return;
+    }
+    try {
+      deleteUnallocatedItems(itemIds);
+      res.json({ success: true, message: `Deleted ${itemIds.length} item(s)` });
+    } catch (error) {
+      console.error("Delete unallocated items failed", error);
+      res.status(500).json({ success: false, message: "Failed to delete unallocated items" });
     }
   });
 

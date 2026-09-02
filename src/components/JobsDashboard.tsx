@@ -19,6 +19,15 @@ interface JobsDashboardProps {
   onDeleteJob: (jobId: string) => void;
   onClearOrphanedData: () => void;
   onAddGlobalInventory: (input: { name: string; sku: string; category: string; unit: string; heatLines: GlobalHeatLine[] }) => void;
+  onDeleteUnallocatedItems: (itemIds: string[]) => void;
+}
+
+interface GlobalUnallocatedRow {
+  name: string; sku: string; category: string; unit: string;
+  total: number;
+  itemIds: string[];
+  byJob: { jobId: string; jobNumber: string; quantity: number }[];
+  heatRecords: { instance: UnallocatedItem['instances'][number]; jobNumber: string; material: { name: string; sku: string; category: string } }[];
 }
 
 const STATUS_STYLES: Record<Job['status'], string> = {
@@ -39,11 +48,13 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
   onDeleteJob,
   onClearOrphanedData,
   onAddGlobalInventory,
+  onDeleteUnallocatedItems,
 }) => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [isClearOrphanedConfirmOpen, setIsClearOrphanedConfirmOpen] = useState(false);
   const [isAddInventoryOpen, setIsAddInventoryOpen] = useState(false);
+  const [pendingDeleteMaterial, setPendingDeleteMaterial] = useState<GlobalUnallocatedRow | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [jobNumber, setJobNumber] = useState('');
   const [projectName, setProjectName] = useState('');
@@ -68,21 +79,17 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
   // per-heat detail and MTR documents.
   const globalUnallocated = useMemo(() => {
     const validJobIds = new Set(jobs.map(j => j.id));
-    const byName = new Map<string, {
-      name: string; sku: string; category: string; unit: string;
-      total: number;
-      byJob: { jobId: string; jobNumber: string; quantity: number }[];
-      heatRecords: { instance: UnallocatedItem['instances'][number]; jobNumber: string; material: { name: string; sku: string; category: string } }[];
-    }>();
+    const byName = new Map<string, GlobalUnallocatedRow>();
 
     for (const item of allUnallocatedPool) {
       if (item.jobId && !validJobIds.has(item.jobId)) continue;
       const key = item.name.trim();
       if (!byName.has(key)) {
-        byName.set(key, { name: key, sku: item.sku, category: item.category, unit: item.unit, total: 0, byJob: [], heatRecords: [] });
+        byName.set(key, { name: key, sku: item.sku, category: item.category, unit: item.unit, total: 0, itemIds: [], byJob: [], heatRecords: [] });
       }
       const entry = byName.get(key)!;
       entry.total += item.quantity;
+      entry.itemIds.push(item.id);
       const jobNumber = item.jobId ? (jobNumberById.get(item.jobId) || 'Unknown Job') : 'Global';
       entry.byJob.push({ jobId: item.jobId || '__global__', jobNumber, quantity: item.quantity });
       for (const instance of item.instances || []) {
@@ -317,6 +324,7 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
                     <th className="px-6 py-3 tech-label">Material / SKU</th>
                     <th className="px-6 py-3 tech-label text-right">Total On Hand</th>
                     <th className="px-6 py-3 tech-label">By Job</th>
+                    <th className="px-6 py-3 tech-label w-8"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-industrial-line/5">
@@ -358,10 +366,19 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
                               ))}
                             </div>
                           </td>
+                          <td className="px-6 py-4 text-right">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setPendingDeleteMaterial(item); }}
+                              className="p-1.5 text-red-500 hover:bg-red-50 transition-colors"
+                              title="Remove from global inventory"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
                         </tr>
                         {isExpanded && (
                           <tr>
-                            <td colSpan={4} className="p-0 bg-industrial-bg/20">
+                            <td colSpan={5} className="p-0 bg-industrial-bg/20">
                               {item.heatRecords.length === 0 ? (
                                 <p className="tech-label px-6 py-4">No heat records logged for this material.</p>
                               ) : (
@@ -590,6 +607,61 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
                 </button>
                 <button
                   onClick={() => setIsClearOrphanedConfirmOpen(false)}
+                  className="w-full py-3 tech-value text-xs uppercase tracking-widest text-industrial-ink/60 hover:text-industrial-ink transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {pendingDeleteMaterial && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-industrial-ink/90 backdrop-blur-xl z-[150] flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-white border border-red-500/20 w-full max-w-md shadow-2xl overflow-hidden text-center p-8"
+            >
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                <AlertCircle size={32} className="text-red-600" />
+              </div>
+              <h2 className="tech-value text-xl mb-2 text-industrial-ink uppercase tracking-tight">Remove Material?</h2>
+              <p className="tech-label text-sm opacity-60 mb-6 leading-relaxed">
+                This permanently deletes <span className="font-bold">{pendingDeleteMaterial.total.toLocaleString()} {pendingDeleteMaterial.unit}</span> of <span className="font-bold">{pendingDeleteMaterial.name}</span> from the global inventory. This action cannot be undone.
+              </p>
+              <div className="flex flex-wrap justify-center gap-1.5 mb-8">
+                {pendingDeleteMaterial.byJob.map(({ jobId, jobNumber, quantity }) => (
+                  <span
+                    key={`del-${jobId}`}
+                    className={cn(
+                      'tech-label text-[9px] px-2 py-1 border font-bold',
+                      jobId === '__global__'
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : 'bg-industrial-bg border-industrial-line/10'
+                    )}
+                  >
+                    {jobNumber}: {quantity.toLocaleString()}
+                  </span>
+                ))}
+              </div>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => { onDeleteUnallocatedItems(pendingDeleteMaterial.itemIds); setPendingDeleteMaterial(null); }}
+                  className="w-full py-4 bg-red-600 text-white tech-value text-sm uppercase tracking-widest hover:bg-red-700 transition-all font-bold shadow-lg shadow-red-600/20"
+                >
+                  Remove Material
+                </button>
+                <button
+                  onClick={() => setPendingDeleteMaterial(null)}
                   className="w-full py-3 tech-value text-xs uppercase tracking-widest text-industrial-ink/60 hover:text-industrial-ink transition-colors"
                 >
                   Cancel

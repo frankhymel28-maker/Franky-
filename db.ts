@@ -184,6 +184,20 @@ export function deleteJob(jobId: string) {
   console.log(`[SQLITE] Deleted job ${jobId} and its data.`);
 }
 
+// Deletes specific unallocated-pool records by id (e.g. removing one
+// material's stock from the Global Unallocated Inventory table) and
+// tombstones them so a stale in-flight sync can't bring them back.
+export function deleteUnallocatedItems(ids: string[]) {
+  if (ids.length === 0) return;
+  const placeholders = ids.map(() => '?').join(',');
+  const transaction = db.transaction(() => {
+    db.prepare(`DELETE FROM unallocated WHERE id IN (${placeholders})`).run(...ids);
+    tombstoneIds('unallocated', ids);
+  });
+  transaction();
+  console.log(`[SQLITE] Deleted ${ids.length} unallocated item(s).`);
+}
+
 // Removes materials/unallocated/spools/manifests/logs whose jobId points to
 // a job that no longer exists - leftover from a deleted job. Records with
 // NO jobId at all are intentionally-global stock (never tied to a job),
