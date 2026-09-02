@@ -26,23 +26,24 @@ import {
   Upload,
   RotateCw,
   Zap,
-  PackageCheck
+  PackageCheck,
+  Briefcase
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PDFDocument } from 'pdf-lib';
 import { cn } from './lib/utils';
 import { MOCK_MATERIALS, MOCK_LOGISTICS } from './constants';
-import { Material, LogisticsEntry, MaterialStatus, LogisticsType, MaterialInstance, UnallocatedItem, VENDORS, Spool, Manifest, ManifestStatus } from './types';
+import { Job, Material, LogisticsEntry, MaterialStatus, LogisticsType, MaterialInstance, UnallocatedItem, VENDORS, Spool, Manifest, ManifestStatus } from './types';
 import { MovementForm } from './components/MovementForm';
 import { BOMUpload } from './components/BOMUpload';
 import { SpoolUpload } from './components/SpoolUpload';
 import { ManifestTicket } from './components/ManifestTicket';
+import { JobsDashboard } from './components/JobsDashboard';
 import { GoogleGenAI, Type } from "@google/genai";
-import { 
-  loadLocalState, 
-  saveToLocalStorage, 
-  syncStateWithBackend, 
-  clearAllLocalStorage 
+import {
+  loadLocalState,
+  saveToLocalStorage,
+  syncStateWithBackend 
 } from './sync';
 
 // Components
@@ -642,6 +643,35 @@ const TraceabilityModal = ({ material, onSave, onClose }: {
   );
 };
 
+const EMPTY_ARRAY: any[] = [];
+
+// Filters an "all jobs" array down to one job's records, and returns a
+// setter with the same signature as the original per-job useState setters
+// (value or updater fn) so existing call sites (setMaterials(prev => ...))
+// keep working unchanged. Any record missing a jobId (i.e. newly created)
+// is stamped with the active job automatically; other jobs' records are
+// left untouched in the "all" array.
+function useJobScoped<T extends { jobId?: string }>(
+  all: T[],
+  setAll: React.Dispatch<React.SetStateAction<T[]>>,
+  activeJobId: string | null
+): [T[], React.Dispatch<React.SetStateAction<T[]>>] {
+  const scoped = useMemo(
+    () => (activeJobId ? all.filter(item => item.jobId === activeJobId) : (EMPTY_ARRAY as T[])),
+    [all, activeJobId]
+  );
+  const setScoped = useCallback((update: React.SetStateAction<T[]>) => {
+    setAll(prevAll => {
+      const others = activeJobId ? prevAll.filter(item => item.jobId !== activeJobId) : prevAll;
+      const prevScoped = activeJobId ? prevAll.filter(item => item.jobId === activeJobId) : prevAll;
+      const nextScoped = typeof update === 'function' ? (update as (p: T[]) => T[])(prevScoped) : update;
+      const stamped = nextScoped.map(item => item.jobId ? item : { ...item, jobId: activeJobId ?? undefined });
+      return activeJobId ? [...others, ...stamped] : stamped;
+    });
+  }, [activeJobId, setAll]);
+  return [scoped, setScoped];
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'logistics' | 'remaining' | 'global_inventory' | 'quality'>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
@@ -653,20 +683,57 @@ export default function App() {
 
   // Load initial cached state or fallback to default mocks
   const initialState = React.useMemo(() => loadLocalState(), []);
-  
-  // App State
-  const [materials, setMaterials] = useState<Material[]>(initialState.materials);
-  const [unallocatedPool, setUnallocatedPool] = useState<UnallocatedItem[]>(initialState.unallocatedPool);
-  const [spools, setSpools] = useState<Spool[]>(initialState.spools);
-  const [manifests, setManifests] = useState<Manifest[]>(initialState.manifests);
+
+  // Job selection - null means "on the Jobs dashboard", not inside any job
+  const [jobs, setJobs] = useState<Job[]>(initialState.jobs);
+  const [activeJobId, setActiveJobId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('franky_active_job_id');
+    } catch {
+      return null;
+    }
+  });
+  React.useEffect(() => {
+    try {
+      if (activeJobId) localStorage.setItem('franky_active_job_id', activeJobId);
+      else localStorage.removeItem('franky_active_job_id');
+    } catch { /* local storage unavailable, ignore */ }
+  }, [activeJobId]);
+  // If the active job was deleted (or never existed), fall back to the dashboard
+  React.useEffect(() => {
+    if (activeJobId && jobs.length > 0 && !jobs.some(j => j.id === activeJobId)) {
+      setActiveJobId(null);
+    }
+  }, [activeJobId, jobs]);
+
+  // App State - these hold EVERY job's records. All rendering/mutation below
+  // operates on the job-scoped views defined further down (materials, spools,
+  // etc.), which are derived from these "all" arrays and shadow these names.
+  const [allMaterials, setAllMaterials] = useState<Material[]>(initialState.materials);
+  const [allUnallocatedPool, setAllUnallocatedPool] = useState<UnallocatedItem[]>(initialState.unallocatedPool);
+  const [allSpools, setAllSpools] = useState<Spool[]>(initialState.spools);
+  const [allManifests, setAllManifests] = useState<Manifest[]>(initialState.manifests);
+  const [allLogs, setAllLogs] = useState<LogisticsEntry[]>(initialState.logs);
   const [selectedSpoolIds, setSelectedSpoolIds] = useState<string[]>([]);
-  const [logs, setLogs] = useState<LogisticsEntry[]>(initialState.logs);
+
+  // Job-scoped views of the "all" arrays above, plus setters with the exact
+  // same signature as the original useState setters (value or updater fn)
+  // that operate on and return job-scoped arrays, so every existing call
+  // site below (setMaterials(prev => ...), etc.) keeps working unchanged.
+  const [materials, setMaterials] = useJobScoped(allMaterials, setAllMaterials, activeJobId);
+  const [unallocatedPool, setUnallocatedPool] = useJobScoped(allUnallocatedPool, setAllUnallocatedPool, activeJobId);
+  const [spools, setSpools] = useJobScoped(allSpools, setAllSpools, activeJobId);
+  const [manifests, setManifests] = useJobScoped(allManifests, setAllManifests, activeJobId);
+  const [logs, setLogs] = useJobScoped(allLogs, setAllLogs, activeJobId);
 
   const syncingFromServerRef = useRef(false);
   const isSyncingRef = useRef(false);
 
-  // Unified function to sync with backend SQLite DB
+  // Unified function to sync with backend SQLite DB. Always syncs the FULL
+  // multi-job dataset (all "all*" arrays), not just the currently open job -
+  // otherwise switching jobs or reloading would lose other jobs' data.
   const triggerSync = useCallback(async (forcedState?: {
+    jobs?: Job[];
     materials?: Material[];
     unallocatedPool?: UnallocatedItem[];
     spools?: Spool[];
@@ -679,21 +746,23 @@ export default function App() {
 
     try {
       const stateToSync = {
-        materials: forcedState?.materials !== undefined ? forcedState.materials : materials,
-        unallocatedPool: forcedState?.unallocatedPool !== undefined ? forcedState.unallocatedPool : unallocatedPool,
-        spools: forcedState?.spools !== undefined ? forcedState.spools : spools,
-        manifests: forcedState?.manifests !== undefined ? forcedState.manifests : manifests,
-        logs: forcedState?.logs !== undefined ? forcedState.logs : logs,
+        jobs: forcedState?.jobs !== undefined ? forcedState.jobs : jobs,
+        materials: forcedState?.materials !== undefined ? forcedState.materials : allMaterials,
+        unallocatedPool: forcedState?.unallocatedPool !== undefined ? forcedState.unallocatedPool : allUnallocatedPool,
+        spools: forcedState?.spools !== undefined ? forcedState.spools : allSpools,
+        manifests: forcedState?.manifests !== undefined ? forcedState.manifests : allManifests,
+        logs: forcedState?.logs !== undefined ? forcedState.logs : allLogs,
       };
 
       const merged = await syncStateWithBackend(stateToSync);
 
       syncingFromServerRef.current = true;
-      setMaterials(merged.materials);
-      setUnallocatedPool(merged.unallocatedPool);
-      setSpools(merged.spools);
-      setManifests(merged.manifests);
-      setLogs(merged.logs);
+      setJobs(merged.jobs);
+      setAllMaterials(merged.materials);
+      setAllUnallocatedPool(merged.unallocatedPool);
+      setAllSpools(merged.spools);
+      setAllManifests(merged.manifests);
+      setAllLogs(merged.logs);
 
       setSyncStatus('synced');
       setLastSyncedTime(Date.now());
@@ -703,7 +772,7 @@ export default function App() {
     } finally {
       isSyncingRef.current = false;
     }
-  }, [materials, unallocatedPool, spools, manifests, logs]);
+  }, [jobs, allMaterials, allUnallocatedPool, allSpools, allManifests, allLogs]);
 
   // Save to local storage and trigger sync when state changes
   React.useEffect(() => {
@@ -711,9 +780,9 @@ export default function App() {
       syncingFromServerRef.current = false;
       return;
     }
-    
+
     // Save to local storage instantly for offline protection
-    saveToLocalStorage({ materials, unallocatedPool, spools, manifests, logs });
+    saveToLocalStorage({ jobs, materials: allMaterials, unallocatedPool: allUnallocatedPool, spools: allSpools, manifests: allManifests, logs: allLogs });
 
     // Debounce the network synchronization
     const timer = setTimeout(() => {
@@ -721,7 +790,7 @@ export default function App() {
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [materials, unallocatedPool, spools, manifests, logs, triggerSync]);
+  }, [jobs, allMaterials, allUnallocatedPool, allSpools, allManifests, allLogs, triggerSync]);
 
   // Keep a ref to the latest triggerSync so the interval/listener below never
   // call a stale closure holding onto old (e.g. pre-clear) state.
@@ -1332,9 +1401,13 @@ export default function App() {
     setIsSpoolModalOpen(false);
   };
 
+  // Clears only the CURRENT job's materials/spools/manifests/logs. These
+  // setters are job-scoped, so this leaves other jobs' data in allMaterials
+  // etc. untouched; the normal auto-save/sync effect persists the change.
   const handleClearInventory = async () => {
-    // Prevent immediate re-sync loop triggers
-    syncingFromServerRef.current = true;
+    if (!activeJobId) return;
+    const jobId = activeJobId;
+
     setMaterials([]);
     setUnallocatedPool([]);
     setLogs([]);
@@ -1343,16 +1416,55 @@ export default function App() {
     setSelectedSpoolIds([]);
     setIsClearConfirmOpen(false);
 
-    // Clear local storage cache
-    clearAllLocalStorage();
-
     try {
       setSyncStatus('syncing');
-      await fetch('/api/clear-db', { method: 'POST' });
+      // syncTable() only ever inserts/updates, so this dedicated endpoint is
+      // what actually deletes the job's rows server-side.
+      await fetch('/api/clear-db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId }),
+      });
       setSyncStatus('synced');
     } catch (err) {
       console.error('[SYNC] Failed to reset remote database:', err);
       setSyncStatus('error');
+    }
+  };
+
+  const handleCreateJob = (input: { jobNumber: string; clientName: string; siteAddress: string; status: Job['status'] }) => {
+    const now = Date.now();
+    const newJob: Job = {
+      id: `job-${now}`,
+      jobNumber: input.jobNumber,
+      clientName: input.clientName,
+      siteAddress: input.siteAddress,
+      status: input.status,
+      createdAt: now,
+      lastUpdated: now,
+    };
+    setJobs(prev => [newJob, ...prev]);
+    setActiveJobId(newJob.id);
+  };
+
+  const handleDeleteJob = async (jobId: string) => {
+    setJobs(prev => prev.filter(j => j.id !== jobId));
+    // Also drop that job's records from the local "all" arrays so they don't
+    // linger in local storage/UI until the next server sync.
+    setAllMaterials(prev => prev.filter(m => m.jobId !== jobId));
+    setAllUnallocatedPool(prev => prev.filter(u => u.jobId !== jobId));
+    setAllSpools(prev => prev.filter(s => s.jobId !== jobId));
+    setAllManifests(prev => prev.filter(m => m.jobId !== jobId));
+    setAllLogs(prev => prev.filter(l => l.jobId !== jobId));
+
+    try {
+      await fetch('/api/jobs/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId }),
+      });
+    } catch (err) {
+      console.error('[SYNC] Failed to delete job on server:', err);
     }
   };
 
@@ -1414,6 +1526,24 @@ export default function App() {
     }
   };
 
+  const activeJob = jobs.find(j => j.id === activeJobId);
+
+  // No job selected yet - show the top-level Jobs dashboard instead of the
+  // per-job app shell below.
+  if (!activeJobId || !activeJob) {
+    return (
+      <JobsDashboard
+        jobs={jobs}
+        allMaterials={allMaterials}
+        allSpools={allSpools}
+        allManifests={allManifests}
+        onOpenJob={setActiveJobId}
+        onCreateJob={handleCreateJob}
+        onDeleteJob={handleDeleteJob}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen flex bg-industrial-bg">
       {/* Sidebar Navigation */}
@@ -1434,6 +1564,14 @@ export default function App() {
             {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
+
+        <button
+          onClick={() => setActiveJobId(null)}
+          className="flex items-center gap-3 px-4 py-3 text-sm tech-value border-b border-industrial-bg/10 hover:bg-white/5 opacity-70 hover:opacity-100 transition-colors"
+        >
+          <Briefcase size={18} />
+          {isSidebarOpen && <span>All Jobs</span>}
+        </button>
 
         <nav className="flex-1 py-4 flex flex-col gap-1">
           {[
@@ -1482,6 +1620,11 @@ export default function App() {
               {activeTab === 'remaining' && 'Remaining Material Backlog'}
               {activeTab === 'logistics' && 'Movement Log'}
             </h1>
+            <div className="h-4 w-[1px] bg-industrial-line/20" />
+            <div className="flex flex-col leading-tight">
+              <span className="tech-value text-xs font-bold">{activeJob.jobNumber}</span>
+              <span className="tech-label text-[10px] opacity-60">{activeJob.clientName}</span>
+            </div>
             <div className="h-4 w-[1px] bg-industrial-line/20" />
             <div className="flex items-center gap-4" title={lastSyncedTime ? `Last synced at ${new Date(lastSyncedTime).toLocaleTimeString()}` : 'Not synced yet'}>
               <div className="flex items-center gap-2">
@@ -2971,10 +3114,10 @@ export default function App() {
                   <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
                     <AlertCircle size={32} className="text-red-600" />
                   </div>
-                  <h2 className="tech-value text-xl mb-2 text-industrial-ink uppercase tracking-tight">Purge System Data?</h2>
+                  <h2 className="tech-value text-xl mb-2 text-industrial-ink uppercase tracking-tight">Purge Job Data?</h2>
                   <p className="tech-label text-sm opacity-60 mb-8 leading-relaxed">
-                    You are about to perform a <span className="text-red-600 font-bold">CRITICAL ACTION</span>. 
-                    This will permanently delete all materials and allocations from the local inventory database. 
+                    You are about to perform a <span className="text-red-600 font-bold">CRITICAL ACTION</span>.
+                    This will permanently delete all materials, spools, manifests, and logs for <span className="font-bold">{activeJob.jobNumber}</span> only - other jobs are not affected.
                     This action cannot be undone.
                   </p>
                   <div className="flex flex-col gap-3">

@@ -1,8 +1,19 @@
-import { Material, LogisticsEntry } from './types';
+import { Job, Material, LogisticsEntry } from './types';
+
+export const DEFAULT_JOB: Job = {
+  id: 'job-demo-1',
+  jobNumber: 'DEMO-001',
+  clientName: 'Demo Client',
+  siteAddress: 'Plaquemine Site A',
+  status: 'active',
+  createdAt: 1,
+  lastUpdated: 1,
+};
 
 export const MOCK_MATERIALS: Material[] = [
   {
     id: 'mat-1',
+    jobId: DEFAULT_JOB.id,
     name: '3" Carbon Steel Pipe (Sch 40)',
     sku: 'CS-P-03-40',
     category: 'Piping',
@@ -27,6 +38,7 @@ export const MOCK_MATERIALS: Material[] = [
   },
   {
     id: 'mat-2',
+    jobId: DEFAULT_JOB.id,
     name: 'M24 Structural Bolt Set',
     sku: 'STR-B-M24',
     category: 'Structural',
@@ -51,6 +63,7 @@ export const MOCK_MATERIALS: Material[] = [
   },
   {
     id: 'mat-3',
+    jobId: DEFAULT_JOB.id,
     name: 'Type J Thermocouple Wire',
     sku: 'ELE-W-TJ',
     category: 'Electrical',
@@ -65,6 +78,7 @@ export const MOCK_MATERIALS: Material[] = [
   },
   {
     id: 'mat-4',
+    jobId: DEFAULT_JOB.id,
     name: 'Isolation Valve 4"',
     sku: 'VAL-IV-04',
     category: 'Instrumentation',
@@ -82,6 +96,7 @@ export const MOCK_MATERIALS: Material[] = [
 export const MOCK_LOGISTICS: LogisticsEntry[] = [
   {
     id: 'log-1',
+    jobId: DEFAULT_JOB.id,
     materialId: 'mat-1',
     materialName: '3" Carbon Steel Pipe (Sch 40)',
     type: 'receipt',
@@ -93,6 +108,7 @@ export const MOCK_LOGISTICS: LogisticsEntry[] = [
   },
   {
     id: 'log-2',
+    jobId: DEFAULT_JOB.id,
     materialId: 'mat-1',
     materialName: '3" Carbon Steel Pipe (Sch 40)',
     type: 'issue',

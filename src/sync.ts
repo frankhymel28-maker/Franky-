@@ -1,7 +1,8 @@
-import { Material, LogisticsEntry, UnallocatedItem, Spool, Manifest } from './types';
-import { MOCK_MATERIALS, MOCK_LOGISTICS } from './constants';
+import { Job, Material, LogisticsEntry, UnallocatedItem, Spool, Manifest } from './types';
+import { DEFAULT_JOB, MOCK_MATERIALS, MOCK_LOGISTICS } from './constants';
 
 export interface LocalState {
+  jobs: Job[];
   materials: Material[];
   unallocatedPool: UnallocatedItem[];
   spools: Spool[];
@@ -10,6 +11,7 @@ export interface LocalState {
 }
 
 const STORAGE_KEYS = {
+  jobs: 'franky_jobs',
   materials: 'franky_materials',
   unallocatedPool: 'franky_unallocated',
   spools: 'franky_spools',
@@ -20,6 +22,7 @@ const STORAGE_KEYS = {
 // Initial state loading
 export function loadLocalState(): LocalState {
   try {
+    const jobsStr = localStorage.getItem(STORAGE_KEYS.jobs);
     const materialsStr = localStorage.getItem(STORAGE_KEYS.materials);
     const unallocatedStr = localStorage.getItem(STORAGE_KEYS.unallocatedPool);
     const spoolsStr = localStorage.getItem(STORAGE_KEYS.spools);
@@ -27,6 +30,7 @@ export function loadLocalState(): LocalState {
     const logsStr = localStorage.getItem(STORAGE_KEYS.logs);
 
     return {
+      jobs: jobsStr ? JSON.parse(jobsStr) : [DEFAULT_JOB],
       materials: materialsStr ? JSON.parse(materialsStr) : MOCK_MATERIALS,
       unallocatedPool: unallocatedStr ? JSON.parse(unallocatedStr) : [],
       spools: spoolsStr ? JSON.parse(spoolsStr) : [],
@@ -36,6 +40,7 @@ export function loadLocalState(): LocalState {
   } catch (error) {
     console.error('Failed to load local storage state:', error);
     return {
+      jobs: [DEFAULT_JOB],
       materials: MOCK_MATERIALS,
       unallocatedPool: [],
       spools: [],
@@ -48,6 +53,7 @@ export function loadLocalState(): LocalState {
 // Save active state to local storage
 export function saveToLocalStorage(state: Partial<LocalState>) {
   try {
+    if (state.jobs) localStorage.setItem(STORAGE_KEYS.jobs, JSON.stringify(state.jobs));
     if (state.materials) localStorage.setItem(STORAGE_KEYS.materials, JSON.stringify(state.materials));
     if (state.unallocatedPool) localStorage.setItem(STORAGE_KEYS.unallocatedPool, JSON.stringify(state.unallocatedPool));
     if (state.spools) localStorage.setItem(STORAGE_KEYS.spools, JSON.stringify(state.spools));
@@ -79,6 +85,7 @@ export async function syncStateWithBackend(localState: LocalState): Promise<Loca
 
   // Extract merged collections
   const mergedState: LocalState = {
+    jobs: result.jobs || [],
     materials: result.materials || [],
     unallocatedPool: result.unallocatedPool || [],
     spools: result.spools || [],
@@ -90,13 +97,4 @@ export async function syncStateWithBackend(localState: LocalState): Promise<Loca
   saveToLocalStorage(mergedState);
 
   return mergedState;
-}
-
-// Clear all local states
-export function clearAllLocalStorage() {
-  localStorage.removeItem(STORAGE_KEYS.materials);
-  localStorage.removeItem(STORAGE_KEYS.unallocatedPool);
-  localStorage.removeItem(STORAGE_KEYS.spools);
-  localStorage.removeItem(STORAGE_KEYS.manifests);
-  localStorage.removeItem(STORAGE_KEYS.logs);
 }

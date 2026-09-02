@@ -3,6 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export type JobStatus = 'active' | 'on-hold' | 'completed';
+
+export interface Job {
+  id: string;
+  jobNumber: string;
+  clientName: string;
+  siteAddress: string;
+  status: JobStatus;
+  createdAt: number;
+  lastUpdated: number;
+}
+
 export type MaterialStatus = 'expected' | 'received' | 'in-transit' | 'installed' | 'low-stock';
 
 export interface MaterialInstance {
@@ -29,6 +41,7 @@ export const VENDORS = [
 
 export interface Material {
   id: string;
+  jobId?: string;
   name: string;
   sku: string;
   category: string;
@@ -46,6 +59,7 @@ export interface Material {
 
 export interface UnallocatedItem {
   id: string;
+  jobId?: string;
   name: string;
   sku: string;
   category: string;
@@ -59,6 +73,7 @@ export type LogisticsType = 'receipt' | 'transfer' | 'issue' | 'adjustment';
 
 export interface LogisticsEntry {
   id: string;
+  jobId?: string;
   materialId: string;
   materialName: string;
   type: LogisticsType;
@@ -80,6 +95,7 @@ export interface SiteStats {
 
 export interface Spool {
   id: string;
+  jobId?: string;
   tag: string;
   drawing?: string;
   iso?: string;
@@ -94,6 +110,7 @@ export type ManifestStatus = 'draft' | 'loaded' | 'shipped' | 'received' | 'comp
 
 export interface Manifest {
   id: string;
+  jobId?: string;
   manifestNumber: string;
   clientName?: string;
   trailerNumber?: string;

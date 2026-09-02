@@ -3,7 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { fileURLToPath } from 'url';
 import nodemailer from "nodemailer";
-import { initDb, handleSync, clearAllDb, getWholeDbState } from "./db.js";
+import { initDb, handleSync, clearJobData, deleteJob, getWholeDbState } from "./db.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,12 +41,32 @@ async function startServer() {
   });
 
   app.post("/api/clear-db", (req, res) => {
+    const { jobId } = req.body;
+    if (!jobId) {
+      res.status(400).json({ success: false, message: "jobId is required" });
+      return;
+    }
     try {
-      clearAllDb();
-      res.json({ success: true, message: "Server-side SQLite database cleared" });
+      clearJobData(jobId);
+      res.json({ success: true, message: `Data for job ${jobId} cleared` });
     } catch (error) {
-      console.error("Clear database failed", error);
-      res.status(500).json({ success: false, message: "Failed to clear server database" });
+      console.error("Clear job data failed", error);
+      res.status(500).json({ success: false, message: "Failed to clear job data" });
+    }
+  });
+
+  app.post("/api/jobs/delete", (req, res) => {
+    const { jobId } = req.body;
+    if (!jobId) {
+      res.status(400).json({ success: false, message: "jobId is required" });
+      return;
+    }
+    try {
+      deleteJob(jobId);
+      res.json({ success: true, message: `Job ${jobId} deleted` });
+    } catch (error) {
+      console.error("Delete job failed", error);
+      res.status(500).json({ success: false, message: "Failed to delete job" });
     }
   });
   app.post("/api/send-manifest", async (req, res) => {
