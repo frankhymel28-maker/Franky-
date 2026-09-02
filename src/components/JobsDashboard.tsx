@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Briefcase, Plus, X, MapPin, Building2, Trash2, Package, Truck, ClipboardList, AlertCircle, Boxes } from 'lucide-react';
+import { Briefcase, Plus, X, MapPin, Trash2, Package, Truck, ClipboardList, AlertCircle, Boxes, Hash } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { Job, Material, Spool, Manifest, UnallocatedItem } from '../types';
@@ -152,13 +152,13 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="tech-value text-base font-bold">{job.jobNumber}</p>
+                      <p className="tech-value text-base font-bold">{job.clientName}</p>
                       {job.projectName && (
                         <p className="tech-label text-[10px] opacity-70 mt-0.5">{job.projectName}</p>
                       )}
                       <p className="tech-label text-[10px] flex items-center gap-1 mt-1">
-                        <Building2 size={11} />
-                        {job.clientName}
+                        <Hash size={11} />
+                        {job.jobNumber}
                       </p>
                     </div>
                     <span className={cn('tech-label text-[9px] px-2 py-1 border font-bold', STATUS_STYLES[job.status])}>
