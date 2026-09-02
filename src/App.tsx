@@ -702,6 +702,7 @@ export default function App() {
   // If the active job was deleted (or never existed), fall back to the dashboard
   React.useEffect(() => {
     if (activeJobId && jobs.length > 0 && !jobs.some(j => j.id === activeJobId)) {
+      console.warn(`[JOBS] activeJobId "${activeJobId}" not found in current jobs list (${jobs.map(j => j.jobNumber).join(', ')}) - bouncing back to the Jobs dashboard.`);
       setActiveJobId(null);
     }
   }, [activeJobId, jobs]);
@@ -773,7 +774,9 @@ export default function App() {
         logs: forcedState?.logs !== undefined ? forcedState.logs : allLogs,
       };
 
+      console.log(`[SYNC] Sending ${stateToSync.jobs.length} jobs, ${stateToSync.materials.length} materials to server...`);
       const merged = await syncStateWithBackend(stateToSync);
+      console.log(`[SYNC] Server responded with ${merged.jobs.length} jobs:`, merged.jobs.map(j => j.jobNumber));
 
       if (localVersionRef.current === versionAtRequestStart) {
         // No local edits happened while this request was in flight - safe
@@ -787,6 +790,8 @@ export default function App() {
         setAllSpools(merged.spools);
         setAllManifests(merged.manifests);
         setAllLogs(merged.logs);
+      } else {
+        console.warn('[SYNC] Discarding stale response - local data changed while this request was in flight. A follow-up sync will pick up the newer data.');
       }
 
       setSyncStatus('synced');
@@ -797,6 +802,7 @@ export default function App() {
     } finally {
       isSyncingRef.current = false;
       if (pendingSyncRef.current) {
+        console.log('[SYNC] Retrying a sync that was queued while the previous one was in flight.');
         pendingSyncRef.current = false;
         triggerSyncRef.current();
       }
@@ -1472,6 +1478,7 @@ export default function App() {
       createdAt: now,
       lastUpdated: now,
     };
+    console.log(`[JOBS] Creating job "${newJob.jobNumber}" (id=${newJob.id})`);
     setJobs(prev => [newJob, ...prev]);
     setActiveJobId(newJob.id);
   };

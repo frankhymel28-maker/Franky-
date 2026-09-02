@@ -32,7 +32,7 @@ async function startServer() {
   app.post("/api/sync", (req, res) => {
     try {
       const mergedPayload = handleSync(req.body);
-      console.log(`[SQLITE] Synced ${req.body.materials?.length || 0} materials, ${req.body.spools?.length || 0} spools, ${req.body.manifests?.length || 0} manifests. Database total: ${mergedPayload.materials.length} materials, ${mergedPayload.spools.length} spools, ${mergedPayload.manifests.length} manifests.`);
+      console.log(`[SQLITE] Synced ${req.body.jobs?.length || 0} jobs, ${req.body.materials?.length || 0} materials, ${req.body.spools?.length || 0} spools, ${req.body.manifests?.length || 0} manifests. Database total: ${mergedPayload.jobs.length} jobs (${mergedPayload.jobs.map((j: any) => j.jobNumber).join(', ')}), ${mergedPayload.materials.length} materials, ${mergedPayload.spools.length} spools, ${mergedPayload.manifests.length} manifests.`);
       res.json({ success: true, ...mergedPayload });
     } catch (error) {
       console.error("Sync failed", error);
