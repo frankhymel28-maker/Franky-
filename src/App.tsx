@@ -11,7 +11,6 @@ import {
   MapPin,
   FileUp,
   AlertCircle,
-  Hash,
   Check,
   ClipboardList,
   FileText,
@@ -19,9 +18,6 @@ import {
   Download,
   Trash2,
   CheckCircle,
-  Circle,
-  ChevronDownSquare,
-  Wrench,
   Camera,
   Upload,
   RotateCw,
@@ -40,6 +36,7 @@ import { SpoolUpload } from './components/SpoolUpload';
 import { ManifestTicket } from './components/ManifestTicket';
 import { JobsDashboard } from './components/JobsDashboard';
 import { MTRViewer } from './components/MTRViewer';
+import { FlangeIcon, ValveIcon, FittingIcon, PipeIcon } from './components/MaterialIcons';
 import { GlobalHeatLine } from './components/AddGlobalInventoryModal';
 import { GoogleGenAI, Type } from "@google/genai";
 import {
@@ -1699,10 +1696,10 @@ export default function App() {
               >
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                   <StatCard label="Material Received" value={stats.receivedPercent} icon={CheckCircle} colorClass="text-green-500" />
-                  <StatCard label="Total Flanges" value={stats.flanges.display} subValue={stats.flanges.label} icon={Circle} />
-                  <StatCard label="Total Valves" value={stats.valves.display} subValue={stats.valves.label} icon={ChevronDownSquare} />
-                  <StatCard label="Total Fittings" value={stats.fittings.display} subValue={stats.fittings.label} icon={Wrench} />
-                  <StatCard label="Total Pipe (FT)" value={stats.pipeFootage.display} subValue={stats.pipeFootage.label} icon={Hash} />
+                  <StatCard label="Total Flanges" value={stats.flanges.display} subValue={stats.flanges.label} icon={FlangeIcon} />
+                  <StatCard label="Total Valves" value={stats.valves.display} subValue={stats.valves.label} icon={ValveIcon} />
+                  <StatCard label="Total Fittings" value={stats.fittings.display} subValue={stats.fittings.label} icon={FittingIcon} />
+                  <StatCard label="Total Pipe (FT)" value={stats.pipeFootage.display} subValue={stats.pipeFootage.label} icon={PipeIcon} />
                 </div>
 
                 <div className="grid grid-cols-1 gap-6">

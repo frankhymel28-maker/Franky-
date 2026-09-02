@@ -19,12 +19,33 @@
   .data-grid-border {
     @apply border-industrial-line/20;
   }
-  
+
   .tech-label {
     @apply font-mono text-[10px] uppercase tracking-wider opacity-50;
   }
-  
+
   .tech-value {
     @apply font-mono uppercase tracking-tight;
+  }
+}
+
+/* Material icons (flange/valve/fitting/pipe) - see src/components/MaterialIcons.tsx */
+@keyframes flange-orbit { to { transform: rotate(360deg); } }
+@keyframes valve-turn {
+  0%, 12%  { transform: rotate(0deg); }
+  50%, 62% { transform: rotate(90deg); }
+  100%     { transform: rotate(0deg); }
+}
+@keyframes dash-run { to { stroke-dashoffset: -20; } }
+
+.ic-flange-dot { animation: flange-orbit 3.2s linear infinite; transform-origin: 12px 12px; }
+.ic-valve-handle { animation: valve-turn 2.6s cubic-bezier(.65,0,.35,1) infinite; transform-origin: 12px 12px; }
+.ic-flow-dash { stroke-dasharray: 2 3; animation: dash-run 1.1s linear infinite; }
+.ic-flow-dash-delay { animation-delay: .28s; }
+.ic-pipe-dash { stroke-dasharray: 2 3.4; animation: dash-run 0.9s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ic-flange-dot, .ic-valve-handle, .ic-flow-dash, .ic-pipe-dash {
+    animation: none !important;
   }
 }

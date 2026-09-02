@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Briefcase, Plus, X, MapPin, Trash2, Package, Truck, ClipboardList, AlertCircle, Boxes, Hash, ChevronDown, ChevronRight, FileText, Circle, ChevronDownSquare, Wrench } from 'lucide-react';
+import { Briefcase, Plus, X, MapPin, Trash2, Package, Truck, ClipboardList, AlertCircle, Boxes, Hash, ChevronDown, ChevronRight, FileText } from 'lucide-react';
+import { FlangeIcon, ValveIcon, FittingIcon, PipeIcon } from './MaterialIcons';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { Job, Material, Spool, Manifest, UnallocatedItem } from '../types';
@@ -243,10 +244,10 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
 
         <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">
           {([
-            { key: 'flange', label: 'Total Flanges', value: categoryTotals.flanges, icon: Circle },
-            { key: 'valve', label: 'Total Valves', value: categoryTotals.valves, icon: ChevronDownSquare },
-            { key: 'fitting', label: 'Total Fittings', value: categoryTotals.fittings, icon: Wrench },
-            { key: 'pipe', label: 'Total Pipe (FT)', value: categoryTotals.pipe, icon: Hash },
+            { key: 'flange', label: 'Total Flanges', value: categoryTotals.flanges, icon: FlangeIcon },
+            { key: 'valve', label: 'Total Valves', value: categoryTotals.valves, icon: ValveIcon },
+            { key: 'fitting', label: 'Total Fittings', value: categoryTotals.fittings, icon: FittingIcon },
+            { key: 'pipe', label: 'Total Pipe (FT)', value: categoryTotals.pipe, icon: PipeIcon },
           ] as const).map(({ key, label, value, icon: Icon }) => {
             const isActive = categoryFilter === key;
             return (
