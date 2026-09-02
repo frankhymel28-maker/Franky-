@@ -3,7 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { fileURLToPath } from 'url';
 import nodemailer from "nodemailer";
-import { initDb, handleSync, clearJobData, deleteJob, getWholeDbState } from "./db.js";
+import { initDb, handleSync, clearJobData, deleteJob, cleanupOrphanedData, getWholeDbState } from "./db.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,6 +69,16 @@ async function startServer() {
       res.status(500).json({ success: false, message: "Failed to delete job" });
     }
   });
+  app.post("/api/cleanup-orphaned", (req, res) => {
+    try {
+      const removed = cleanupOrphanedData();
+      res.json({ success: true, removed });
+    } catch (error) {
+      console.error("Cleanup orphaned data failed", error);
+      res.status(500).json({ success: false, message: "Failed to clean up orphaned data" });
+    }
+  });
+
   app.post("/api/send-manifest", async (req, res) => {
     const { emails, manifestId } = req.body; // Expecting array
     console.log(`[PROTOTYPE] Sending manifest ${manifestId} to ${emails.join(', ')}`);

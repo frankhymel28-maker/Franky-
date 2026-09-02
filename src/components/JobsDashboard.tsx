@@ -10,9 +10,11 @@ interface JobsDashboardProps {
   allUnallocatedPool: UnallocatedItem[];
   allSpools: Spool[];
   allManifests: Manifest[];
+  orphanedCounts: { materials: number; unallocatedPool: number; spools: number; manifests: number; logs: number };
   onOpenJob: (jobId: string) => void;
   onCreateJob: (input: { jobNumber: string; clientName: string; siteAddress: string; status: Job['status'] }) => void;
   onDeleteJob: (jobId: string) => void;
+  onClearOrphanedData: () => void;
 }
 
 const STATUS_STYLES: Record<Job['status'], string> = {
@@ -27,30 +29,38 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
   allUnallocatedPool,
   allSpools,
   allManifests,
+  orphanedCounts,
   onOpenJob,
   onCreateJob,
   onDeleteJob,
+  onClearOrphanedData,
 }) => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [isClearOrphanedConfirmOpen, setIsClearOrphanedConfirmOpen] = useState(false);
   const [jobNumber, setJobNumber] = useState('');
   const [clientName, setClientName] = useState('');
   const [siteAddress, setSiteAddress] = useState('');
   const [status, setStatus] = useState<Job['status']>('active');
 
   const jobNumberById = useMemo(() => new Map(jobs.map(j => [j.id, j.jobNumber])), [jobs]);
+  const totalOrphaned = orphanedCounts.materials + orphanedCounts.unallocatedPool + orphanedCounts.spools + orphanedCounts.manifests + orphanedCounts.logs;
 
   // Same material aggregated across multiple jobs' unallocated pools is
   // merged into one row (grouped by name), with a per-job quantity
   // breakdown, so the same part number bought for two jobs shows as one
-  // line rather than duplicates.
+  // line rather than duplicates. Items with no job (or a deleted job) are
+  // orphaned data, not real per-job inventory, so they're excluded here -
+  // see the "Clear Orphaned Data" action instead.
   const globalUnallocated = useMemo(() => {
+    const validJobIds = new Set(jobs.map(j => j.id));
     const byName = new Map<string, {
       name: string; sku: string; category: string; unit: string;
       total: number; byJob: { jobId: string; jobNumber: string; quantity: number }[];
     }>();
 
     for (const item of allUnallocatedPool) {
+      if (!item.jobId || !validJobIds.has(item.jobId)) continue;
       const key = item.name.trim();
       if (!byName.has(key)) {
         byName.set(key, { name: key, sku: item.sku, category: item.category, unit: item.unit, total: 0, byJob: [] });
@@ -67,7 +77,7 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
     }
 
     return Array.from(byName.values()).sort((a, b) => b.total - a.total);
-  }, [allUnallocatedPool, jobNumberById]);
+  }, [allUnallocatedPool, jobs, jobNumberById]);
 
   const resetForm = () => {
     setJobNumber('');
@@ -103,6 +113,23 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
       </header>
 
       <main className="p-6 max-w-6xl mx-auto">
+        {totalOrphaned > 0 && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <AlertCircle size={18} className="text-amber-600 shrink-0" />
+              <p className="tech-label text-amber-800 normal-case tracking-normal">
+                {totalOrphaned} record{totalOrphaned === 1 ? '' : 's'} found with no job (or a deleted job) - {orphanedCounts.materials} materials, {orphanedCounts.unallocatedPool} unallocated, {orphanedCounts.spools} spools, {orphanedCounts.manifests} manifests, {orphanedCounts.logs} logs.
+              </p>
+            </div>
+            <button
+              onClick={() => setIsClearOrphanedConfirmOpen(true)}
+              className="shrink-0 px-4 py-2 border border-amber-300 text-amber-800 tech-value text-[10px] uppercase tracking-widest hover:bg-amber-100 transition-colors"
+            >
+              Clear Orphaned Data
+            </button>
+          </div>
+        )}
+
         {jobs.length === 0 ? (
           <div className="py-24 flex flex-col items-center justify-center text-center border-2 border-dashed border-industrial-line/20">
             <Briefcase size={40} className="opacity-30 mb-4" />
@@ -349,6 +376,46 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
                 </button>
                 <button
                   onClick={() => setPendingDeleteId(null)}
+                  className="w-full py-3 tech-value text-xs uppercase tracking-widest text-industrial-ink/60 hover:text-industrial-ink transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isClearOrphanedConfirmOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-industrial-ink/90 backdrop-blur-xl z-[150] flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-white border border-red-500/20 w-full max-w-md shadow-2xl overflow-hidden text-center p-8"
+            >
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                <AlertCircle size={32} className="text-red-600" />
+              </div>
+              <h2 className="tech-value text-xl mb-2 text-industrial-ink uppercase tracking-tight">Clear Orphaned Data?</h2>
+              <p className="tech-label text-sm opacity-60 mb-8 leading-relaxed">
+                This permanently deletes {totalOrphaned} record{totalOrphaned === 1 ? '' : 's'} with no job (or a deleted job): {orphanedCounts.materials} materials, {orphanedCounts.unallocatedPool} unallocated, {orphanedCounts.spools} spools, {orphanedCounts.manifests} manifests, {orphanedCounts.logs} logs. No existing job's data is affected. This action cannot be undone.
+              </p>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => { onClearOrphanedData(); setIsClearOrphanedConfirmOpen(false); }}
+                  className="w-full py-4 bg-red-600 text-white tech-value text-sm uppercase tracking-widest hover:bg-red-700 transition-all font-bold shadow-lg shadow-red-600/20"
+                >
+                  Clear Orphaned Data
+                </button>
+                <button
+                  onClick={() => setIsClearOrphanedConfirmOpen(false)}
                   className="w-full py-3 tech-value text-xs uppercase tracking-widest text-industrial-ink/60 hover:text-industrial-ink transition-colors"
                 >
                   Cancel

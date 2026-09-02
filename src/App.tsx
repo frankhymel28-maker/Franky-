@@ -1504,6 +1504,37 @@ export default function App() {
     }
   };
 
+  // Records with no jobId, or a jobId that doesn't match any current job -
+  // left behind by data created before the Jobs feature existed, or
+  // belonging to a job that was since deleted.
+  const orphanedCounts = useMemo(() => {
+    const validJobIds = new Set(jobs.map(j => j.id));
+    const isOrphaned = (item: { jobId?: string }) => !item.jobId || !validJobIds.has(item.jobId);
+    return {
+      materials: allMaterials.filter(isOrphaned).length,
+      unallocatedPool: allUnallocatedPool.filter(isOrphaned).length,
+      spools: allSpools.filter(isOrphaned).length,
+      manifests: allManifests.filter(isOrphaned).length,
+      logs: allLogs.filter(isOrphaned).length,
+    };
+  }, [jobs, allMaterials, allUnallocatedPool, allSpools, allManifests, allLogs]);
+
+  const handleClearOrphanedData = async () => {
+    const validJobIds = new Set(jobs.map(j => j.id));
+    const keep = <T extends { jobId?: string }>(item: T) => !!item.jobId && validJobIds.has(item.jobId);
+    setAllMaterials(prev => prev.filter(keep));
+    setAllUnallocatedPool(prev => prev.filter(keep));
+    setAllSpools(prev => prev.filter(keep));
+    setAllManifests(prev => prev.filter(keep));
+    setAllLogs(prev => prev.filter(keep));
+
+    try {
+      await fetch('/api/cleanup-orphaned', { method: 'POST' });
+    } catch (err) {
+      console.error('[SYNC] Failed to clean up orphaned data on server:', err);
+    }
+  };
+
   const createManifest = () => {
     if (selectedSpoolIds.length === 0) return;
     
@@ -1574,9 +1605,11 @@ export default function App() {
         allUnallocatedPool={allUnallocatedPool}
         allSpools={allSpools}
         allManifests={allManifests}
+        orphanedCounts={orphanedCounts}
         onOpenJob={setActiveJobId}
         onCreateJob={handleCreateJob}
         onDeleteJob={handleDeleteJob}
+        onClearOrphanedData={handleClearOrphanedData}
       />
     );
   }
