@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Briefcase, Plus, X, MapPin, Trash2, Package, Truck, ClipboardList, AlertCircle, Boxes, Hash, ChevronDown, ChevronRight, FileText } from 'lucide-react';
+import { Briefcase, Plus, X, MapPin, Trash2, Package, Truck, ClipboardList, AlertCircle, Boxes, Hash, ChevronDown, ChevronRight, FileText, Circle, ChevronDownSquare, Wrench } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { Job, Material, Spool, Manifest, UnallocatedItem } from '../types';
@@ -43,6 +43,7 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [isClearOrphanedConfirmOpen, setIsClearOrphanedConfirmOpen] = useState(false);
   const [isAddInventoryOpen, setIsAddInventoryOpen] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [jobNumber, setJobNumber] = useState('');
   const [projectName, setProjectName] = useState('');
   const [clientName, setClientName] = useState('');
@@ -94,6 +95,31 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
 
     return Array.from(byName.values()).sort((a, b) => b.total - a.total);
   }, [allUnallocatedPool, jobs, jobNumberById]);
+
+  // High-level on-hand totals by broad category, across every row in
+  // globalUnallocated (job-tied and global stock alike) - same substring
+  // category match used by the per-job stat cards.
+  const categoryTotals = useMemo(() => {
+    const totalFor = (catName: string) =>
+      globalUnallocated
+        .filter(item => item.category.toLowerCase().includes(catName))
+        .reduce((acc, item) => acc + item.total, 0);
+    return {
+      flanges: totalFor('flange'),
+      valves: totalFor('valve'),
+      fittings: totalFor('fitting'),
+      pipe: totalFor('pipe'),
+    };
+  }, [globalUnallocated]);
+
+  const visibleUnallocated = useMemo(() => {
+    if (!categoryFilter) return globalUnallocated;
+    return globalUnallocated.filter(item => item.category.toLowerCase().includes(categoryFilter));
+  }, [globalUnallocated, categoryFilter]);
+
+  const toggleCategoryFilter = (cat: string) => {
+    setCategoryFilter(prev => (prev === cat ? null : cat));
+  };
 
   const resetForm = () => {
     setJobNumber('');
@@ -215,18 +241,56 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
           </div>
         )}
 
-        <div className="mt-8 bg-white border border-industrial-line/10">
+        <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+          {([
+            { key: 'flange', label: 'Total Flanges', value: categoryTotals.flanges, icon: Circle },
+            { key: 'valve', label: 'Total Valves', value: categoryTotals.valves, icon: ChevronDownSquare },
+            { key: 'fitting', label: 'Total Fittings', value: categoryTotals.fittings, icon: Wrench },
+            { key: 'pipe', label: 'Total Pipe (FT)', value: categoryTotals.pipe, icon: Hash },
+          ] as const).map(({ key, label, value, icon: Icon }) => {
+            const isActive = categoryFilter === key;
+            return (
+              <button
+                key={key}
+                onClick={() => toggleCategoryFilter(key)}
+                className={cn(
+                  'text-left bg-white border p-4 flex flex-col gap-0.5 transition-colors',
+                  isActive ? 'border-industrial-accent ring-1 ring-industrial-accent' : 'border-industrial-line/10 hover:border-industrial-line/30'
+                )}
+              >
+                <div className="flex justify-between items-start">
+                  <span className="tech-label">{label}</span>
+                  <Icon className="w-4 h-4 opacity-70" />
+                </div>
+                <span className="text-xl tech-value">{value.toLocaleString()}</span>
+                <span className="text-[10px] tech-label uppercase opacity-60 tracking-wider font-bold">
+                  {isActive ? 'Click to clear filter' : 'On hand · click to filter'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 bg-white border border-industrial-line/10">
           <div className="p-4 border-b border-industrial-line/10 bg-industrial-bg/10 flex justify-between items-center">
             <div className="flex items-center gap-2">
               <Boxes size={16} className="opacity-50" />
               <div>
                 <h2 className="tech-value text-sm">Global Unallocated Inventory</h2>
-                <p className="tech-label">Unassigned stock on hand across every job</p>
+                <p className="tech-label">
+                  Unassigned stock on hand across every job
+                  {categoryFilter && (
+                    <>
+                      {' '}&middot; filtered to <span className="font-bold capitalize">{categoryFilter}s</span>
+                      <button onClick={() => setCategoryFilter(null)} className="ml-2 underline hover:no-underline">clear</button>
+                    </>
+                  )}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
               <span className="tech-label text-[9px] px-2 py-1 bg-industrial-bg font-bold">
-                {globalUnallocated.length} UNIQUE ITEMS
+                {visibleUnallocated.length} UNIQUE ITEMS
               </span>
               <button
                 onClick={() => setIsAddInventoryOpen(true)}
@@ -238,10 +302,10 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
             </div>
           </div>
 
-          {globalUnallocated.length === 0 ? (
+          {visibleUnallocated.length === 0 ? (
             <div className="py-16 flex flex-col items-center justify-center text-center">
               <Boxes size={28} className="opacity-20 mb-3" />
-              <p className="tech-label">No unallocated materials in any job yet</p>
+              <p className="tech-label">{categoryFilter ? `No ${categoryFilter}s on hand` : 'No unallocated materials in any job yet'}</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -255,7 +319,7 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-industrial-line/5">
-                  {globalUnallocated.map((item, idx) => {
+                  {visibleUnallocated.map((item, idx) => {
                     const isExpanded = expandedMaterial === item.name;
                     return (
                       <React.Fragment key={`global-unalloc-${item.name}-${idx}`}>
