@@ -12,7 +12,7 @@ interface JobsDashboardProps {
   allManifests: Manifest[];
   orphanedCounts: { materials: number; unallocatedPool: number; spools: number; manifests: number; logs: number };
   onOpenJob: (jobId: string) => void;
-  onCreateJob: (input: { jobNumber: string; clientName: string; siteAddress: string; status: Job['status'] }) => void;
+  onCreateJob: (input: { jobNumber: string; projectName: string; clientName: string; siteAddress: string; status: Job['status'] }) => void;
   onDeleteJob: (jobId: string) => void;
   onClearOrphanedData: () => void;
 }
@@ -39,6 +39,7 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [isClearOrphanedConfirmOpen, setIsClearOrphanedConfirmOpen] = useState(false);
   const [jobNumber, setJobNumber] = useState('');
+  const [projectName, setProjectName] = useState('');
   const [clientName, setClientName] = useState('');
   const [siteAddress, setSiteAddress] = useState('');
   const [status, setStatus] = useState<Job['status']>('active');
@@ -81,6 +82,7 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
 
   const resetForm = () => {
     setJobNumber('');
+    setProjectName('');
     setClientName('');
     setSiteAddress('');
     setStatus('active');
@@ -89,7 +91,7 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!jobNumber.trim() || !clientName.trim()) return;
-    onCreateJob({ jobNumber: jobNumber.trim(), clientName: clientName.trim(), siteAddress: siteAddress.trim(), status });
+    onCreateJob({ jobNumber: jobNumber.trim(), projectName: projectName.trim(), clientName: clientName.trim(), siteAddress: siteAddress.trim(), status });
     resetForm();
     setIsCreateOpen(false);
   };
@@ -151,6 +153,9 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="tech-value text-base font-bold">{job.jobNumber}</p>
+                      {job.projectName && (
+                        <p className="tech-label text-[10px] opacity-70 mt-0.5">{job.projectName}</p>
+                      )}
                       <p className="tech-label text-[10px] flex items-center gap-1 mt-1">
                         <Building2 size={11} />
                         {job.clientName}
@@ -287,6 +292,15 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
                     value={jobNumber}
                     onChange={e => setJobNumber(e.target.value)}
                     placeholder="e.g. JOB-2026-014"
+                    className="bg-white border border-industrial-line/20 px-3 py-2 text-sm font-mono focus:outline-none focus:border-industrial-accent"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="tech-label">Project Name</span>
+                  <input
+                    value={projectName}
+                    onChange={e => setProjectName(e.target.value)}
+                    placeholder="e.g. Unit 4 Turnaround"
                     className="bg-white border border-industrial-line/20 px-3 py-2 text-sm font-mono focus:outline-none focus:border-industrial-accent"
                   />
                 </label>

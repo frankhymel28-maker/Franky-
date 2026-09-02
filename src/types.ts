@@ -8,6 +8,7 @@ export type JobStatus = 'active' | 'on-hold' | 'completed';
 export interface Job {
   id: string;
   jobNumber: string;
+  projectName?: string;
   clientName: string;
   siteAddress: string;
   status: JobStatus;

@@ -1467,11 +1467,12 @@ export default function App() {
     }
   };
 
-  const handleCreateJob = (input: { jobNumber: string; clientName: string; siteAddress: string; status: Job['status'] }) => {
+  const handleCreateJob = (input: { jobNumber: string; projectName: string; clientName: string; siteAddress: string; status: Job['status'] }) => {
     const now = Date.now();
     const newJob: Job = {
       id: `job-${now}`,
       jobNumber: input.jobNumber,
+      projectName: input.projectName || undefined,
       clientName: input.clientName,
       siteAddress: input.siteAddress,
       status: input.status,
@@ -1693,7 +1694,7 @@ export default function App() {
             <div className="h-4 w-[1px] bg-industrial-line/20" />
             <div className="flex flex-col leading-tight">
               <span className="tech-value text-xs font-bold">{activeJob.jobNumber}</span>
-              <span className="tech-label text-[10px] opacity-60">{activeJob.clientName}</span>
+              <span className="tech-label text-[10px] opacity-60">{activeJob.projectName || activeJob.clientName}</span>
             </div>
             <div className="h-4 w-[1px] bg-industrial-line/20" />
             <div className="flex items-center gap-4" title={lastSyncedTime ? `Last synced at ${new Date(lastSyncedTime).toLocaleTimeString()}` : 'Not synced yet'}>
