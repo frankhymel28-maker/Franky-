@@ -728,6 +728,21 @@ export default function App() {
 
   const syncingFromServerRef = useRef(false);
   const isSyncingRef = useRef(false);
+  // If a sync is requested while one is already in flight, it's dropped
+  // rather than queued - this flag remembers to retry once the in-flight
+  // one finishes, so newly created data is never just left unsent.
+  const pendingSyncRef = useRef(false);
+  // Bumped whenever any synced state changes locally. Used to detect (and
+  // discard) a sync response that started before, and resolved after, a
+  // newer local edit - otherwise that stale response would overwrite the
+  // newer edit with the older data it was sent with. This happens for real:
+  // React StrictMode double-fires the mount-time sync effect in dev, so a
+  // stale first request is still in flight when a user creates something
+  // moments after page load.
+  const localVersionRef = useRef(0);
+  React.useEffect(() => {
+    localVersionRef.current++;
+  }, [jobs, allMaterials, allUnallocatedPool, allSpools, allManifests, allLogs]);
 
   // Unified function to sync with backend SQLite DB. Always syncs the FULL
   // multi-job dataset (all "all*" arrays), not just the currently open job -
@@ -740,8 +755,12 @@ export default function App() {
     manifests?: Manifest[];
     logs?: LogisticsEntry[];
   }) => {
-    if (isSyncingRef.current) return;
+    if (isSyncingRef.current) {
+      pendingSyncRef.current = true;
+      return;
+    }
     isSyncingRef.current = true;
+    const versionAtRequestStart = localVersionRef.current;
     setSyncStatus('syncing');
 
     try {
@@ -756,13 +775,19 @@ export default function App() {
 
       const merged = await syncStateWithBackend(stateToSync);
 
-      syncingFromServerRef.current = true;
-      setJobs(merged.jobs);
-      setAllMaterials(merged.materials);
-      setAllUnallocatedPool(merged.unallocatedPool);
-      setAllSpools(merged.spools);
-      setAllManifests(merged.manifests);
-      setAllLogs(merged.logs);
+      if (localVersionRef.current === versionAtRequestStart) {
+        // No local edits happened while this request was in flight - safe
+        // to apply. If there were, applying this older snapshot would wipe
+        // out the newer edit, so skip it; pendingSyncRef/the debounce/the
+        // 8s interval will pick the newer state up in a follow-up sync.
+        syncingFromServerRef.current = true;
+        setJobs(merged.jobs);
+        setAllMaterials(merged.materials);
+        setAllUnallocatedPool(merged.unallocatedPool);
+        setAllSpools(merged.spools);
+        setAllManifests(merged.manifests);
+        setAllLogs(merged.logs);
+      }
 
       setSyncStatus('synced');
       setLastSyncedTime(Date.now());
@@ -771,6 +796,10 @@ export default function App() {
       setSyncStatus('offline');
     } finally {
       isSyncingRef.current = false;
+      if (pendingSyncRef.current) {
+        pendingSyncRef.current = false;
+        triggerSyncRef.current();
+      }
     }
   }, [jobs, allMaterials, allUnallocatedPool, allSpools, allManifests, allLogs]);
 
