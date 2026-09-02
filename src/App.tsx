@@ -1425,6 +1425,32 @@ export default function App() {
     }
   };
 
+  // Removes one heat record from an unallocated-pool item. If it was the
+  // item's last remaining heat record, the whole (now-empty) item is
+  // deleted the same way handleDeleteUnallocatedItems does (dedicated
+  // endpoint + tombstone, so it can't resurrect from a stale sync).
+  // Otherwise this is just an in-place update (fewer instances, lower
+  // quantity, newer lastUpdated) - the normal sync flow persists that fine
+  // on its own, the same way any other quantity/status edit does.
+  const handleDeleteHeatRecord = (itemId: string, instanceId: string) => {
+    const item = allUnallocatedPool.find(i => i.id === itemId);
+    if (!item) return;
+    const removedInstance = item.instances.find(i => i.id === instanceId);
+    const remainingInstances = item.instances.filter(i => i.id !== instanceId);
+
+    if (remainingInstances.length === 0) {
+      handleDeleteUnallocatedItems([itemId]);
+      return;
+    }
+
+    setAllUnallocatedPool(prev => prev.map(i => i.id === itemId ? {
+      ...i,
+      instances: remainingInstances,
+      quantity: Math.max(0, i.quantity - (removedInstance?.quantity || 0)),
+      lastUpdated: Date.now(),
+    } : i));
+  };
+
   const createManifest = () => {
     if (selectedSpoolIds.length === 0) return;
     
@@ -1502,6 +1528,7 @@ export default function App() {
         onClearOrphanedData={handleClearOrphanedData}
         onAddGlobalInventory={handleAddGlobalInventory}
         onDeleteUnallocatedItems={handleDeleteUnallocatedItems}
+        onDeleteHeatRecord={handleDeleteHeatRecord}
       />
     );
   }

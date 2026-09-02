@@ -20,6 +20,7 @@ interface JobsDashboardProps {
   onClearOrphanedData: () => void;
   onAddGlobalInventory: (input: { name: string; sku: string; category: string; unit: string; heatLines: GlobalHeatLine[] }) => void;
   onDeleteUnallocatedItems: (itemIds: string[]) => void;
+  onDeleteHeatRecord: (itemId: string, instanceId: string) => void;
 }
 
 interface GlobalUnallocatedRow {
@@ -27,7 +28,7 @@ interface GlobalUnallocatedRow {
   total: number;
   itemIds: string[];
   byJob: { jobId: string; jobNumber: string; quantity: number }[];
-  heatRecords: { instance: UnallocatedItem['instances'][number]; jobNumber: string; material: { name: string; sku: string; category: string } }[];
+  heatRecords: { instance: UnallocatedItem['instances'][number]; itemId: string; jobNumber: string; material: { name: string; sku: string; category: string } }[];
 }
 
 const STATUS_STYLES: Record<Job['status'], string> = {
@@ -49,12 +50,16 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
   onClearOrphanedData,
   onAddGlobalInventory,
   onDeleteUnallocatedItems,
+  onDeleteHeatRecord,
 }) => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [isClearOrphanedConfirmOpen, setIsClearOrphanedConfirmOpen] = useState(false);
   const [isAddInventoryOpen, setIsAddInventoryOpen] = useState(false);
   const [pendingDeleteMaterial, setPendingDeleteMaterial] = useState<GlobalUnallocatedRow | null>(null);
+  const [pendingDeleteHeat, setPendingDeleteHeat] = useState<{
+    itemId: string; instanceId: string; heatNumber: string; jobNumber: string; quantity?: number; materialName: string;
+  } | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [jobNumber, setJobNumber] = useState('');
   const [projectName, setProjectName] = useState('');
@@ -95,6 +100,7 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
       for (const instance of item.instances || []) {
         entry.heatRecords.push({
           instance,
+          itemId: item.id,
           jobNumber,
           material: { name: item.name, sku: item.sku, category: item.category },
         });
@@ -391,10 +397,11 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
                                       <th className="px-6 py-2 tech-label text-[9px] text-right">Qty</th>
                                       <th className="px-6 py-2 tech-label text-[9px]">Quality</th>
                                       <th className="px-6 py-2 tech-label text-[9px] text-right">Documentation</th>
+                                      <th className="px-6 py-2 tech-label text-[9px] w-8"></th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-industrial-line/5">
-                                    {item.heatRecords.map(({ instance, jobNumber, material }, hIdx) => (
+                                    {item.heatRecords.map(({ instance, itemId, jobNumber, material }, hIdx) => (
                                       <tr key={`heat-${item.name}-${instance.id}-${hIdx}`}>
                                         <td className="pl-14 pr-6 py-3 tech-value text-xs font-bold">{instance.heatNumber || '—'}</td>
                                         <td className="px-6 py-3 tech-label">{instance.mtrNumber || '—'}</td>
@@ -421,6 +428,25 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
                                           ) : (
                                             <span className="tech-label text-[9px] opacity-40">No MTR on file</span>
                                           )}
+                                        </td>
+                                        <td className="px-6 py-3 text-right">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setPendingDeleteHeat({
+                                                itemId,
+                                                instanceId: instance.id,
+                                                heatNumber: instance.heatNumber || '—',
+                                                jobNumber,
+                                                quantity: instance.quantity,
+                                                materialName: material.name,
+                                              });
+                                            }}
+                                            className="p-1.5 text-red-500 hover:bg-red-50 transition-colors"
+                                            title="Remove this heat record"
+                                          >
+                                            <Trash2 size={13} />
+                                          </button>
                                         </td>
                                       </tr>
                                     ))}
@@ -662,6 +688,47 @@ export const JobsDashboard: React.FC<JobsDashboardProps> = ({
                 </button>
                 <button
                   onClick={() => setPendingDeleteMaterial(null)}
+                  className="w-full py-3 tech-value text-xs uppercase tracking-widest text-industrial-ink/60 hover:text-industrial-ink transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {pendingDeleteHeat && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-industrial-ink/90 backdrop-blur-xl z-[150] flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-white border border-red-500/20 w-full max-w-md shadow-2xl overflow-hidden text-center p-8"
+            >
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                <AlertCircle size={32} className="text-red-600" />
+              </div>
+              <h2 className="tech-value text-xl mb-2 text-industrial-ink uppercase tracking-tight">Remove Heat Record?</h2>
+              <p className="tech-label text-sm opacity-60 mb-8 leading-relaxed">
+                This permanently deletes heat <span className="font-bold">{pendingDeleteHeat.heatNumber}</span>
+                {pendingDeleteHeat.quantity != null ? <> (<span className="font-bold">{pendingDeleteHeat.quantity.toLocaleString()}</span>)</> : null} of <span className="font-bold">{pendingDeleteHeat.materialName}</span> from <span className="font-bold">{pendingDeleteHeat.jobNumber}</span>. This action cannot be undone.
+              </p>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => { onDeleteHeatRecord(pendingDeleteHeat.itemId, pendingDeleteHeat.instanceId); setPendingDeleteHeat(null); }}
+                  className="w-full py-4 bg-red-600 text-white tech-value text-sm uppercase tracking-widest hover:bg-red-700 transition-all font-bold shadow-lg shadow-red-600/20"
+                >
+                  Remove Heat Record
+                </button>
+                <button
+                  onClick={() => setPendingDeleteHeat(null)}
                   className="w-full py-3 tech-value text-xs uppercase tracking-widest text-industrial-ink/60 hover:text-industrial-ink transition-colors"
                 >
                   Cancel
